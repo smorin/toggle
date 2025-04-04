@@ -193,3 +193,11 @@ alias pc := pre-commit-run
     @echo "cp target/release/{{command_name}} ~/.local/bin/ # or another directory in your PATH"
 
 alias br := build-release
+
+# Run the simple Python test case
+[group('test')]
+@test-python:
+    @echo "Running Python test case..."
+    ./tests/test_simple_python.sh
+
+alias tp := test-python

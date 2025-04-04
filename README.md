@@ -13,7 +13,7 @@ Create a Rust-based CLI tool, **`toggle`**, that can:
 - Comment or uncomment designated lines or blocks of text in code files.
 - Detect and apply correct single-line or multi-line comment styles by file extension.
 - Work off a configuration file (`.toggleConfig`) or command-line arguments.
-- Identify labeled “sections” to toggle on or off across multiple files.
+- Identify labeled "sections" to toggle on or off across multiple files.
 - Provide granular control (line-based, section-based, file-based, multi-file).
 
 **Core Objectives**  
@@ -200,7 +200,7 @@ print("New feature code here...")
    - **Single-line** approach (e.g., `#`, `//`): Prepend or remove the token from each line.  
    - **Multi-line** approach (e.g., `/* ... */`):
      - Insert `/*` at the first line, `*/` at the last line (or for partial lines, handle carefully).  
-     - Alternatively, comment each line singly if that’s simpler for toggling.  
+     - Alternatively, comment each line singly if that's simpler for toggling.  
    - Keep track of lines that are already partially or fully commented to avoid double-commenting.
 
 7. **Output & Write-Back**  
