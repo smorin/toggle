@@ -36,36 +36,29 @@ DASH := $(GRAY)-$(NC)
 
 .PHONY: all build test bench clean format lint
 
-# Default target
-all: test build
 
-# Build the project
-build:
-	cargo build
+all: help ## Default target
 
-# Run tests
-test:
-	cargo test
+build: ## Build the project (just build)
+	just build
 
-# Run benchmarks
-bench:
-	cargo bench
+test: ## Run tests (just test)
+	just test
 
-# Clean build artifacts
-clean:
-	cargo clean
+bench: ## Run benchmarks (just bench)
+	just bench
 
-# Format code
-format:
-	cargo fmt
+clean: ## Clean build artifacts (just clean)
+	just clean
 
-# Run linter
-lint:
-	cargo clippy -- -D warnings
+format: ## Format code (just format)
+	just format
 
-# Release build
-release:
-	cargo build --release
+lint: ## Run linter (just lint)
+	just lint
+
+release: ## Release build (just build-release)
+	just build-release
 
 ## `make check` Example Output
 

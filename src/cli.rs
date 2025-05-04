@@ -35,10 +35,10 @@ impl Default for Args {
 }
 
 /// Parse command line arguments
-pub fn parse_args(args: &[String]) -> Result<Args, String> {
+pub fn parse_args(_args: &[String]) -> Result<Args, String> {
     // Placeholder for argument parsing
     // Will implement proper parsing in a future task
-    
+
     // Return default args for now
     Ok(Args::default())
 }
@@ -46,8 +46,8 @@ pub fn parse_args(args: &[String]) -> Result<Args, String> {
 /// Print help message
 pub fn print_help() {
     println!("toggle - Comment/uncomment lines in text files");
-    println!("Usage: toggle [OPTIONS] FILE...");
-    println!("");
+    println!("Usage: toggle [OPTIONS] <FILE>");
+    println!();
     println!("Options:");
     println!("  -l, --line <range>       Line range (required) in format N:M or N:+K");
     println!("  -f, --force <on|off>     Force commenting or uncommenting instead of toggling");

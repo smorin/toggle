@@ -55,8 +55,21 @@ DASH := "$(GRAY)-$(NC)"
 
 alias c := check-deps
 
+# Runs a complete dev cycle: formats code, runs linter, executes tests, builds the app
+[group('dev'), group('quick start')]
+@dev:
+    just format
+    just lint
+    just test
+    just build
+    # just run
+
+# Alias for dev (full developer cycle: format → lint → test → build)
+alias cycle := dev
+
+
 # Format code
-[group('check')]
+[group('check'), group('quick start')]
 @format:
     echo "Running formatter..."
     echo "  rustfmt"
@@ -81,20 +94,29 @@ alias l := lint
 
 alias t := test
 
-# Run all checks
+# Run benchmarks
 [group('check')]
+@bench:
+    cargo bench
+
+alias be := bench
+
+# Run all checks
+[group('check'), group('quick start')]
 @check: test lint
     echo "All checks passed!"
 
 alias ca := check
 
-# Run package command.
-[group('run')]
+# Run debug package command.
+[group('run'), group('quick start')]
 @run-debug *args=args:
     cargo run -- {{args}}
 
 alias rd := run-debug
 
+# Run release package command.
+[group('run')]
 @run-release *args=args:
     cargo run --release -- {{args}}
 
@@ -127,7 +149,7 @@ alias pc := pre-commit-run
     {{cmd}} --version
 
 # Clean up temporary files and caches
-[group('clean')]
+[group('clean'), group('quick start')]
 @clean:
     cargo clean
     rm -rf target/
@@ -173,7 +195,7 @@ alias pc := pre-commit-run
     echo "{{GREEN}}Documentation built successfully{{NC}}"
 
 # Run documentation server with hot reloading
-[group('docs')]
+[group('docs'), group('quick start')]
 @docs-dev:
     cargo doc --document-private-items --open --watch
 

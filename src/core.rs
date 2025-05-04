@@ -15,21 +15,21 @@ impl LineRange {
 }
 
 /// Parse a line range specification
-pub fn parse_line_range(range_spec: &str) -> Result<LineRange, String> {
+pub fn parse_line_range(_range_spec: &str) -> Result<LineRange, String> {
     // Placeholder for line range parsing logic
     // Will implement the actual algorithm in a future task
     Err("Not implemented yet".to_string())
 }
 
 /// Merge multiple line ranges into a minimal list of non-overlapping ranges
-pub fn merge_ranges(ranges: &[LineRange]) -> Vec<LineRange> {
+pub fn merge_ranges(_ranges: &[LineRange]) -> Vec<LineRange> {
     // Placeholder for range merging algorithm
     // Will implement the actual algorithm in a future task
     Vec::new()
 }
 
 /// Toggle comments in the specified line ranges
-pub fn toggle_comments(content: &str, ranges: &[LineRange], force_mode: Option<&str>) -> String {
+pub fn toggle_comments(content: &str, _ranges: &[LineRange], _force_mode: Option<&str>) -> String {
     // Placeholder for comment toggling logic
     // Will implement the actual algorithm in a future task
     content.to_string()
