@@ -34,9 +34,38 @@ CHECK := $(GREEN)✓$(NC)
 CROSS := $(RED)✗$(NC)
 DASH := $(GRAY)-$(NC)
 
-.PHONY: all check install-uv install-just set-path help
+.PHONY: all build test bench clean format lint
 
-all: help
+# Default target
+all: test build
+
+# Build the project
+build:
+	cargo build
+
+# Run tests
+test:
+	cargo test
+
+# Run benchmarks
+bench:
+	cargo bench
+
+# Clean build artifacts
+clean:
+	cargo clean
+
+# Format code
+format:
+	cargo fmt
+
+# Run linter
+lint:
+	cargo clippy -- -D warnings
+
+# Release build
+release:
+	cargo build --release
 
 ## `make check` Example Output
 

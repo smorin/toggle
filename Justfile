@@ -201,3 +201,41 @@ alias br := build-release
     ./tests/test_simple_python.sh
 
 alias tp := test-python
+
+
+# Help for Task Master
+[group('help')]
+taskmaster-help:
+    @echo "Help Task Master"
+    task-master --help
+
+# Docs for Task Master
+[group('docs')]
+taskmaster-docs:
+    @echo "Task Master Docs"
+    open "https://github.com/eyaltoledano/claude-task-master"
+
+# Version of Task Master
+[group('version')]
+taskmaster-version:
+    @echo "Task Master Version"
+    task-master --version
+
+# Print Task Master quickstart commands
+[group('help')]
+taskmaster-quickstart:
+    @echo "Task Master Quickstart Commands:"
+    @echo "# Initialize a new project"
+    @echo "task-master init"
+    @echo ""
+    @echo "# Parse a PRD and generate tasks"
+    @echo "task-master parse-prd your-prd.txt"
+    @echo ""
+    @echo "# List all tasks"
+    @echo "task-master list"
+    @echo ""
+    @echo "# Show the next task to work on"
+    @echo "task-master next"
+    @echo ""
+    @echo "# Generate task files"
+    @echo "task-master generate"

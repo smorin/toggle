@@ -4,7 +4,42 @@ version = "0.1.0"
 edition = "2021"
 authors = ["Steve Morin"]
 description = "A CLI tool for toggling code comments across multiple languages"
+license = "MIT"
+repository = "https://github.com/stevemorin/toggle"
+readme = "README.md"
+
+# Configure binary and library targets
+[[bin]]
+name = "toggle"
+path = "src/main.rs"
+
+[lib]
+name = "toggle"
+path = "src/lib.rs"
 
 [dependencies]
+# CLI argument parsing
 clap = { version = "4.4", features = ["derive"] }
+# Error handling
 anyhow = "1.0"
+# File path manipulation
+walkdir = "2.4"
+# Temporary file handling
+tempfile = "3.8"
+
+[dev-dependencies]
+# For benchmarking
+criterion = "0.5"
+# For CLI testing
+assert_cmd = "2.0"
+predicates = "3.0"
+
+# Configure benchmarks
+[[bench]]
+name = "toggle_bench"
+harness = false
+
+# Feature flags
+[features]
+default = []
+extended-logging = []
