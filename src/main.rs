@@ -50,6 +50,7 @@ fn classify_error(err: &anyhow::Error) -> ExitCode {
         || msg.contains("Line number must be")
         || msg.contains("Start line must be")
         || msg.contains("is not a .py file")
+        || msg.contains("out of range")
         || msg.contains("Unsupported file extension")
     {
         return ExitCode::Usage;
@@ -109,6 +110,15 @@ fn toggle_line_range(
     let comment_style = core::get_comment_style(path, mode)?;
     let (start_line, end_line) = core::parse_line_range(line_range)?;
     let content = io::read_file(path)?;
+
+    let line_count = content.lines().count();
+    if start_line > line_count {
+        return Err(anyhow!(
+            "Start line {} is out of range (file has {} lines)",
+            start_line,
+            line_count
+        ));
+    }
 
     let range = core::LineRange::new(start_line, end_line);
     let force_mode = force.as_deref();

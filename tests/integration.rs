@@ -120,6 +120,18 @@ fn test_toggle_shell() {
     assert!(result.contains("#"));
 }
 
+// ── Out-of-range lines ──
+
+#[test]
+fn test_out_of_range_line_errors() {
+    let (_dir, path) = setup_temp_file("line1\nline2\n", "test.py");
+    cmd()
+        .args([path.to_str().unwrap(), "-l", "100:105"])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains("out of range"));
+}
+
 // ── Missing file ──
 
 #[test]

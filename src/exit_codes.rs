@@ -9,7 +9,8 @@ pub enum ExitCode {
     IoError = 2,
     /// EC03: Toggle logic issue
     ToggleError = 3,
-    /// EC04: Internal panic
+    /// EC04: Internal panic (reserved for future panic hook, not yet wired)
+    #[allow(dead_code)]
     Internal = 4,
 }
 

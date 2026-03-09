@@ -39,6 +39,17 @@ fn test_parse_line_range_invalid() {
     assert!(parse_line_range("1:+abc").is_err());
 }
 
+#[test]
+fn test_parse_line_range_inverted_errors() {
+    assert!(parse_line_range("5:3").is_err());
+}
+
+#[test]
+fn test_parse_line_range_zero_errors() {
+    assert!(parse_line_range("0").is_err());
+    assert!(parse_line_range("0:5").is_err());
+}
+
 // ── merge_ranges ──
 
 #[test]
