@@ -232,62 +232,6 @@ pub fn get_comment_style(path: &Path, _mode: &str) -> Result<CommentStyle> {
         .ok_or_else(|| anyhow!("Unsupported file extension: .{}", extension))
 }
 
-/// Check if lines are already commented
-pub fn check_if_commented(lines: &[String], comment_style: &CommentStyle) -> bool {
-    for line in lines {
-        let trimmed_line = line.trim_start();
-        if !trimmed_line.is_empty() {
-            return trimmed_line.starts_with(&comment_style.single_line);
-        }
-    }
-    false
-}
-
-/// Toggle comment state on a slice of lines
-pub fn toggle_lines(
-    lines: &mut [String],
-    start: usize,
-    end: usize,
-    force_state: Option<bool>,
-    comment_style: &CommentStyle,
-) -> Result<()> {
-    let is_commented = check_if_commented(&lines[start..end], comment_style);
-
-    let should_comment = match force_state {
-        Some(true) => true,
-        Some(false) => false,
-        None => !is_commented,
-    };
-
-    if should_comment {
-        if is_commented {
-            for line in lines[start..end].iter_mut() {
-                if line.starts_with(&format!("{} ", comment_style.single_line)) {
-                    *line = line[comment_style.single_line.len() + 1..].to_string();
-                } else if line.starts_with(&comment_style.single_line) {
-                    *line = line[comment_style.single_line.len()..].to_string();
-                }
-            }
-        }
-
-        for line in lines[start..end].iter_mut() {
-            *line = format!("{} {}", comment_style.single_line, line);
-        }
-    } else if !should_comment && is_commented {
-        let prefix = format!("{} ", comment_style.single_line);
-        let prefix_len = prefix.len();
-        for line in lines[start..end].iter_mut() {
-            if line.starts_with(&prefix) {
-                *line = line[prefix_len..].to_string();
-            } else if line.starts_with(&comment_style.single_line) {
-                *line = line[comment_style.single_line.len()..].to_string();
-            }
-        }
-    }
-
-    Ok(())
-}
-
 /// Find section markers and toggle the content between them.
 /// Returns true if the file was modified.
 pub fn find_and_toggle_section(

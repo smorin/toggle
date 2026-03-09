@@ -8,7 +8,15 @@ use toggle::exit_codes::ExitCode;
 use toggle::io;
 
 fn main() {
-    let cli = Cli::parse();
+    let cli = match Cli::try_parse() {
+        Ok(cli) => cli,
+        Err(e) => {
+            // Let clap print its error/help message
+            let _ = e.print();
+            // Use our custom Usage exit code instead of clap's default (2)
+            std::process::exit(ExitCode::Usage.code());
+        }
+    };
 
     let result = run(&cli);
     let code = match &result {

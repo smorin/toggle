@@ -1,6 +1,5 @@
 use toggle::core::{
-    check_if_commented, get_comment_style, merge_ranges, parse_line_range, toggle_comments,
-    toggle_lines, CommentStyle, LineRange,
+    get_comment_style, merge_ranges, parse_line_range, toggle_comments, LineRange,
 };
 
 // ── parse_line_range ──
@@ -180,88 +179,6 @@ fn test_toggle_comments_skips_shebang() {
     let result = toggle_comments(content, &ranges, None);
     // Shebang is protected, only second line toggled
     assert_eq!(result, "#!/usr/bin/env python3\nregular comment");
-}
-
-// ── check_if_commented ──
-
-#[test]
-fn test_check_if_commented_all_commented() {
-    let style = CommentStyle {
-        single_line: "#".to_string(),
-    };
-    let lines = vec!["# comment".to_string(), "# another".to_string()];
-    assert!(check_if_commented(&lines, &style));
-}
-
-#[test]
-fn test_check_if_commented_not_commented() {
-    let style = CommentStyle {
-        single_line: "#".to_string(),
-    };
-    let lines = vec!["code".to_string(), "more code".to_string()];
-    assert!(!check_if_commented(&lines, &style));
-}
-
-#[test]
-fn test_check_if_commented_blank_lines() {
-    let style = CommentStyle {
-        single_line: "#".to_string(),
-    };
-    let lines = vec!["".to_string(), "  ".to_string()];
-    assert!(!check_if_commented(&lines, &style));
-}
-
-#[test]
-fn test_check_if_commented_first_nonblank_determines() {
-    let style = CommentStyle {
-        single_line: "#".to_string(),
-    };
-    let lines = vec!["".to_string(), "# comment".to_string(), "code".to_string()];
-    assert!(check_if_commented(&lines, &style));
-}
-
-// ── toggle_lines ──
-
-#[test]
-fn test_toggle_lines_comment() {
-    let style = CommentStyle {
-        single_line: "#".to_string(),
-    };
-    let mut lines = vec!["hello".to_string(), "world".to_string()];
-    toggle_lines(&mut lines, 0, 2, None, &style).unwrap();
-    assert_eq!(lines[0], "# hello");
-    assert_eq!(lines[1], "# world");
-}
-
-#[test]
-fn test_toggle_lines_uncomment() {
-    let style = CommentStyle {
-        single_line: "#".to_string(),
-    };
-    let mut lines = vec!["# hello".to_string(), "# world".to_string()];
-    toggle_lines(&mut lines, 0, 2, None, &style).unwrap();
-    assert_eq!(lines[0], "hello");
-    assert_eq!(lines[1], "world");
-}
-
-#[test]
-fn test_toggle_lines_force_on() {
-    let style = CommentStyle {
-        single_line: "#".to_string(),
-    };
-    let mut lines = vec!["hello".to_string()];
-    toggle_lines(&mut lines, 0, 1, Some(true), &style).unwrap();
-    assert_eq!(lines[0], "# hello");
-}
-
-#[test]
-fn test_toggle_lines_force_off() {
-    let style = CommentStyle {
-        single_line: "#".to_string(),
-    };
-    let mut lines = vec!["# hello".to_string()];
-    toggle_lines(&mut lines, 0, 1, Some(false), &style).unwrap();
-    assert_eq!(lines[0], "hello");
 }
 
 // ── get_comment_style ──
