@@ -4,6 +4,7 @@ use anyhow::Result;
 use std::collections::HashMap;
 use std::path::Path;
 
+use crate::config::ToggleConfig;
 use crate::exit_codes::UsageError;
 
 /// Line range representation
@@ -210,9 +211,65 @@ fn toggle_comments_inner(
     result
 }
 
-/// Get the comment style for a file based on its extension
-pub fn get_comment_style(path: &Path, _mode: &str) -> Result<CommentStyle> {
+/// Map file extension to language name for config lookup
+fn ext_to_language(ext: &str) -> &str {
+    match ext {
+        "py" => "python",
+        "js" | "jsx" => "javascript",
+        "ts" | "tsx" => "typescript",
+        "rs" => "rust",
+        "rb" => "ruby",
+        "sh" => "shell",
+        "yaml" | "yml" => "yaml",
+        "r" => "r",
+        "ex" | "exs" => "elixir",
+        "pl" | "pm" => "perl",
+        "java" => "java",
+        "c" => "c",
+        "cpp" => "cpp",
+        "go" => "go",
+        "swift" => "swift",
+        "kt" => "kotlin",
+        "scala" => "scala",
+        "php" => "php",
+        "lua" => "lua",
+        "hs" => "haskell",
+        "sql" => "sql",
+        "toml" => "toml",
+        other => other,
+    }
+}
+
+/// Get the comment style for a file based on its extension.
+/// If a config is provided, language-specific overrides take priority,
+/// then global overrides, then the hardcoded defaults.
+pub fn get_comment_style(
+    path: &Path,
+    _mode: &str,
+    config: Option<&ToggleConfig>,
+) -> Result<CommentStyle> {
     let extension = path.extension().and_then(|ext| ext.to_str()).unwrap_or("");
+
+    // Check config overrides first
+    if let Some(cfg) = config {
+        let lang = ext_to_language(extension);
+        // Language-specific override
+        if let Some(delimiter) = cfg.get_language_delimiter(lang) {
+            return Ok(CommentStyle {
+                single_line: delimiter.to_string(),
+            });
+        }
+        // Global override
+        if let Some(delimiter) = cfg
+            .global
+            .as_ref()
+            .and_then(|g| g.single_line_delimiter.as_deref())
+        {
+            return Ok(CommentStyle {
+                single_line: delimiter.to_string(),
+            });
+        }
+    }
 
     let mut comment_styles = HashMap::new();
     // Hash-style comments

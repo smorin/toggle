@@ -197,31 +197,31 @@ fn test_toggle_comments_skips_shebang() {
 
 #[test]
 fn test_get_comment_style_python() {
-    let style = get_comment_style(std::path::Path::new("test.py"), "auto").unwrap();
+    let style = get_comment_style(std::path::Path::new("test.py"), "auto", None).unwrap();
     assert_eq!(style.single_line, "#");
 }
 
 #[test]
 fn test_get_comment_style_javascript() {
-    let style = get_comment_style(std::path::Path::new("test.js"), "auto").unwrap();
+    let style = get_comment_style(std::path::Path::new("test.js"), "auto", None).unwrap();
     assert_eq!(style.single_line, "//");
 }
 
 #[test]
 fn test_get_comment_style_rust() {
-    let style = get_comment_style(std::path::Path::new("test.rs"), "auto").unwrap();
+    let style = get_comment_style(std::path::Path::new("test.rs"), "auto", None).unwrap();
     assert_eq!(style.single_line, "//");
 }
 
 #[test]
 fn test_get_comment_style_shell() {
-    let style = get_comment_style(std::path::Path::new("test.sh"), "auto").unwrap();
+    let style = get_comment_style(std::path::Path::new("test.sh"), "auto", None).unwrap();
     assert_eq!(style.single_line, "#");
 }
 
 #[test]
 fn test_get_comment_style_unsupported() {
-    assert!(get_comment_style(std::path::Path::new("test.xyz"), "auto").is_err());
+    assert!(get_comment_style(std::path::Path::new("test.xyz"), "auto", None).is_err());
 }
 
 // ── Section toggle with trailing empty lines (Issue 23) ──
