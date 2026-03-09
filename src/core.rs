@@ -309,14 +309,23 @@ pub fn find_and_toggle_section(
             let section_start = i + 1;
 
             let end_marker = format!("toggle:end ID={}", section_id);
-            let mut section_end = lines.len();
+            let mut section_end = None;
 
             for (j, line) in lines.iter().enumerate().skip(i + 1) {
                 if line.contains(&end_marker) {
-                    section_end = j;
+                    section_end = Some(j);
                     break;
                 }
             }
+
+            let section_end = match section_end {
+                Some(end) => end,
+                None => {
+                    return Err(
+                        UsageError(format!("Unclosed section ID={}", section_id)).into()
+                    );
+                }
+            };
 
             if section_end > section_start {
                 let force_mode = force.as_deref();
@@ -346,7 +355,7 @@ pub fn find_and_toggle_section(
                     toggled_lines.pop();
                 }
                 let section_len = section_end - section_start;
-                debug_assert_eq!(
+                assert_eq!(
                     toggled_lines.len(),
                     section_len,
                     "Toggled line count ({}) must match section span ({})",
