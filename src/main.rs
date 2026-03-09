@@ -59,7 +59,7 @@ fn process_path(path: &Path, cli: &Cli) -> Result<()> {
         if cli.verbose {
             eprintln!("  Section: {}", section);
         }
-        toggle_section(path, section, &cli.force, &cli.mode)?;
+        toggle_section(path, section, &cli.force, &cli.mode, cli.verbose)?;
     }
 
     Ok(())
@@ -73,25 +73,18 @@ fn toggle_line_range(
 ) -> Result<()> {
     let comment_style = core::get_comment_style(path, mode)?;
     let (start_line, end_line) = core::parse_line_range(line_range)?;
+    let content = io::read_file(path)?;
 
-    let mut lines = io::read_lines(path)?;
+    let range = core::LineRange::new(start_line, end_line);
+    let force_mode = force.as_deref();
+    let result = core::toggle_comments_with_marker(
+        &content,
+        &[range],
+        force_mode,
+        &comment_style.single_line,
+    );
 
-    if start_line == 0 || start_line > lines.len() {
-        return Err(anyhow!(
-            "Start line {} is out of range (1-{})",
-            start_line,
-            lines.len()
-        ));
-    }
-
-    let end_line = std::cmp::min(end_line, lines.len());
-
-    let force_state = parse_force_state(force);
-    let start_idx = start_line - 1;
-
-    core::toggle_lines(&mut lines, start_idx, end_line, force_state, &comment_style)?;
-
-    io::write_lines(path, &lines)?;
+    io::write_file(path, &result, None)?;
 
     Ok(())
 }
@@ -101,34 +94,34 @@ fn toggle_section(
     section_id: &str,
     force: &Option<String>,
     mode: &str,
+    verbose: bool,
 ) -> Result<()> {
-    println!("  Looking for section with ID={}", section_id);
-
     let comment_style = core::get_comment_style(path, mode)?;
-    println!(
-        "  Using comment style: {} for single-line comments",
-        comment_style.single_line
-    );
+
+    if verbose {
+        eprintln!("  Looking for section with ID={}", section_id);
+        eprintln!(
+            "  Using comment style: {} for single-line comments",
+            comment_style.single_line
+        );
+    }
 
     let mut lines = io::read_lines(path)?;
-    println!("  File has {} lines", lines.len());
+
+    if verbose {
+        eprintln!("  File has {} lines", lines.len());
+    }
 
     let modified = core::find_and_toggle_section(&mut lines, section_id, force, &comment_style)?;
 
     if modified {
-        println!("  File modified, writing changes back");
+        if verbose {
+            eprintln!("  File modified, writing changes back");
+        }
         io::write_lines(path, &lines)?;
-    } else {
-        println!("  No changes made to file");
+    } else if verbose {
+        eprintln!("  No changes made to file");
     }
 
     Ok(())
-}
-
-fn parse_force_state(force: &Option<String>) -> Option<bool> {
-    match force {
-        Some(force_str) if force_str == "on" => Some(true),
-        Some(force_str) if force_str == "off" => Some(false),
-        _ => None,
-    }
 }

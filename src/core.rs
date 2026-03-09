@@ -79,13 +79,22 @@ pub fn merge_ranges(ranges: &[LineRange]) -> Vec<LineRange> {
 }
 
 /// Toggle comments in the specified line ranges.
-/// Uses `#` as the comment marker (Python-style per Phase 0 PRD).
+/// `marker`: comment prefix (e.g. `"#"`, `"//"`, `"--"`). Defaults to `"#"` if `None`.
 /// `force_mode`: `Some("on")` = always comment, `Some("off")` = always uncomment, `None` = invert.
 pub fn toggle_comments(content: &str, ranges: &[LineRange], force_mode: Option<&str>) -> String {
+    toggle_comments_with_marker(content, ranges, force_mode, "#")
+}
+
+/// Toggle comments with an explicit comment marker.
+pub fn toggle_comments_with_marker(
+    content: &str,
+    ranges: &[LineRange],
+    force_mode: Option<&str>,
+    marker: &str,
+) -> String {
     let mut lines: Vec<String> = content.lines().map(String::from).collect();
     let protected = crate::io::detect_protected_lines(content);
     let merged = merge_ranges(ranges);
-    let marker = "#";
 
     for range in &merged {
         // Convert 1-based inclusive range to 0-based indices
@@ -142,14 +151,15 @@ pub fn toggle_comments(content: &str, ranges: &[LineRange], force_mode: Option<&
             let rest = &line[leading_ws.len()..];
 
             if should_comment {
-                // Comment: insert "# " at first non-whitespace
+                // Comment: insert marker + space at first non-whitespace
                 lines[idx] = format!("{}{} {}", leading_ws, marker, rest);
             } else {
-                // Uncomment: remove "#" and optional following space
-                if rest.starts_with(&format!("{} ", marker)) {
-                    lines[idx] = format!("{}{}", leading_ws, &rest[2..]);
+                // Uncomment: remove marker and optional following space
+                let marker_space = format!("{} ", marker);
+                if rest.starts_with(&marker_space) {
+                    lines[idx] = format!("{}{}", leading_ws, &rest[marker_space.len()..]);
                 } else if rest.starts_with(marker) {
-                    lines[idx] = format!("{}{}", leading_ws, &rest[1..]);
+                    lines[idx] = format!("{}{}", leading_ws, &rest[marker.len()..]);
                 }
             }
         }
@@ -207,21 +217,12 @@ pub fn toggle_lines(
     comment_style: &CommentStyle,
 ) -> Result<()> {
     let is_commented = check_if_commented(&lines[start..end], comment_style);
-    println!(
-        "  Current section state: {}",
-        if is_commented { "commented" } else { "uncommented" }
-    );
 
     let should_comment = match force_state {
         Some(true) => true,
         Some(false) => false,
         None => !is_commented,
     };
-
-    println!(
-        "  Will {}",
-        if should_comment { "comment" } else { "uncomment" }
-    );
 
     if should_comment {
         if is_commented {
@@ -232,13 +233,11 @@ pub fn toggle_lines(
                     *line = line[comment_style.single_line.len()..].to_string();
                 }
             }
-            println!("  Uncommented first to avoid double-commenting");
         }
 
         for line in lines[start..end].iter_mut() {
             *line = format!("{}{}", comment_style.single_line, line);
         }
-        println!("  Commented lines {}-{}", start + 1, end);
     } else if !should_comment && is_commented {
         let prefix = format!("{} ", comment_style.single_line);
         let prefix_len = prefix.len();
@@ -249,9 +248,6 @@ pub fn toggle_lines(
                 *line = line[comment_style.single_line.len()..].to_string();
             }
         }
-        println!("  Uncommented lines {}-{}", start + 1, end);
-    } else {
-        println!("  No changes needed (already in desired state)");
     }
 
     Ok(())
@@ -272,7 +268,6 @@ pub fn find_and_toggle_section(
         let start_marker = format!("toggle:start ID={}", section_id);
 
         if lines[i].contains(&start_marker) {
-            println!("  Found start marker at line {}: {}", i + 1, lines[i]);
             let section_start = i + 1;
 
             let end_marker = format!("toggle:end ID={}", section_id);
@@ -281,23 +276,11 @@ pub fn find_and_toggle_section(
             for (j, line) in lines.iter().enumerate().skip(i + 1) {
                 if line.contains(&end_marker) {
                     section_end = j;
-                    println!("  Found end marker at line {}: {}", j + 1, line);
                     break;
                 }
             }
 
             if section_end > section_start {
-                println!(
-                    "  Section spans content lines {}-{} (excluding markers)",
-                    section_start + 1,
-                    section_end
-                );
-
-                for (index_in_slice, line) in lines[section_start..section_end].iter().enumerate() {
-                    let original_line_index = section_start + index_in_slice;
-                    println!("  Content line {}: '{}'", original_line_index + 1, line);
-                }
-
                 let force_state = match force {
                     Some(force_str) if force_str == "on" => Some(true),
                     Some(force_str) if force_str == "off" => Some(false),
@@ -308,11 +291,6 @@ pub fn find_and_toggle_section(
                 modified = true;
 
                 i = section_end;
-            } else {
-                println!(
-                    "  Warning: Could not find end marker for section {}",
-                    section_id
-                );
             }
         }
 
