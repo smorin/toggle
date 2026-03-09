@@ -106,8 +106,19 @@ pub fn toggle_comments_with_marker(
     force_mode: Option<&str>,
     marker: &str,
 ) -> String {
-    let mut lines: Vec<String> = content.lines().map(String::from).collect();
     let protected = crate::io::detect_protected_lines(content);
+    toggle_comments_inner(content, ranges, force_mode, marker, &protected)
+}
+
+/// Toggle comments with explicit protected lines (empty vec to skip protection).
+fn toggle_comments_inner(
+    content: &str,
+    ranges: &[LineRange],
+    force_mode: Option<&str>,
+    marker: &str,
+    protected: &[usize],
+) -> String {
+    let mut lines: Vec<String> = content.lines().map(String::from).collect();
     let merged = merge_ranges(ranges);
 
     for range in &merged {
@@ -312,11 +323,14 @@ pub fn find_and_toggle_section(
                 // preserve indentation)
                 let section_content = lines[section_start..section_end].join("\n");
                 let range = LineRange::new(1, section_end - section_start);
-                let toggled = toggle_comments_with_marker(
+                // Pass empty protected set — section content is user-specified
+                // and should not have false shebang/pragma detection
+                let toggled = toggle_comments_inner(
                     &section_content,
                     &[range],
                     force_mode,
                     &comment_style.single_line,
+                    &[],
                 );
 
                 // Splice toggled lines back in

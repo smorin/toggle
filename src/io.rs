@@ -1,8 +1,7 @@
 // File I/O operations for the Toggle CLI
 
-use anyhow::Result;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, Read, Write};
+use std::io::{self, Read, Write};
 use std::path::Path;
 use tempfile::NamedTempFile;
 
@@ -79,12 +78,4 @@ pub fn detect_protected_lines(content: &str) -> Vec<usize> {
     }
 
     protected
-}
-
-/// Read a file into a Vec of lines
-pub fn read_lines(path: &Path) -> Result<Vec<String>> {
-    let file = File::open(path)?;
-    let reader = BufReader::new(file);
-    let lines: Vec<String> = reader.lines().collect::<io::Result<_>>()?;
-    Ok(lines)
 }

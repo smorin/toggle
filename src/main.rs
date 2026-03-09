@@ -135,7 +135,7 @@ fn toggle_section(
     }
 
     let original_content = io::read_file(path)?;
-    let mut lines = io::read_lines(path)?;
+    let mut lines: Vec<String> = original_content.lines().map(String::from).collect();
 
     if verbose {
         eprintln!("  File has {} lines", lines.len());
