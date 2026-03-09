@@ -13,7 +13,7 @@ fn main() {
     let result = run(&cli);
     let code = match &result {
         Ok(_) => ExitCode::Success,
-        Err(_) => ExitCode::ToggleError,
+        Err(e) => classify_error(e),
     };
 
     if let Err(e) = &result {
@@ -22,6 +22,32 @@ fn main() {
 
     let exit_val = if cli.posix_exit { code.posix() } else { code.code() };
     std::process::exit(exit_val);
+}
+
+fn classify_error(err: &anyhow::Error) -> ExitCode {
+    // Walk the error chain looking for specific error types
+    for cause in err.chain() {
+        if cause.downcast_ref::<std::io::Error>().is_some() {
+            return ExitCode::IoError;
+        }
+    }
+
+    // Check error message for usage-related patterns
+    let msg = format!("{:#}", err);
+    if msg.contains("Invalid start line")
+        || msg.contains("Invalid end line")
+        || msg.contains("Invalid line number")
+        || msg.contains("Invalid line count")
+        || msg.contains("End line")
+        || msg.contains("Line number must be")
+        || msg.contains("Start line must be")
+        || msg.contains("is not a .py file")
+        || msg.contains("Unsupported file extension")
+    {
+        return ExitCode::Usage;
+    }
+
+    ExitCode::ToggleError
 }
 
 fn run(cli: &Cli) -> Result<()> {
@@ -118,7 +144,8 @@ fn toggle_section(
         if verbose {
             eprintln!("  File modified, writing changes back");
         }
-        io::write_lines(path, &lines)?;
+        let content = lines.join("\n") + "\n";
+        io::write_file(path, &content, None)?;
     } else if verbose {
         eprintln!("  No changes made to file");
     }

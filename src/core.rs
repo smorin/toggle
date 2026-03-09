@@ -32,6 +32,10 @@ pub fn parse_line_range(range_spec: &str) -> Result<(usize, usize)> {
             .parse::<usize>()
             .map_err(|_| anyhow!("Invalid start line: {}", start))?;
 
+        if start_line == 0 {
+            return Err(anyhow!("Start line must be >= 1, got 0"));
+        }
+
         if let Some(stripped_end) = end.strip_prefix('+') {
             // Format: start:+count
             let count = stripped_end
@@ -43,6 +47,13 @@ pub fn parse_line_range(range_spec: &str) -> Result<(usize, usize)> {
             let end_line = end
                 .parse::<usize>()
                 .map_err(|_| anyhow!("Invalid end line: {}", end))?;
+            if end_line < start_line {
+                return Err(anyhow!(
+                    "End line {} is less than start line {}",
+                    end_line,
+                    start_line
+                ));
+            }
             Ok((start_line, end_line))
         }
     } else {
@@ -50,6 +61,9 @@ pub fn parse_line_range(range_spec: &str) -> Result<(usize, usize)> {
         let line = range_spec
             .parse::<usize>()
             .map_err(|_| anyhow!("Invalid line number: {}", range_spec))?;
+        if line == 0 {
+            return Err(anyhow!("Line number must be >= 1, got 0"));
+        }
         Ok((line, line))
     }
 }
@@ -151,8 +165,18 @@ pub fn toggle_comments_with_marker(
             let rest = &line[leading_ws.len()..];
 
             if should_comment {
-                // Comment: insert marker + space at first non-whitespace
-                lines[idx] = format!("{}{} {}", leading_ws, marker, rest);
+                // Strip existing comment marker first to avoid double-commenting
+                let stripped = {
+                    let marker_space = format!("{} ", marker);
+                    if rest.starts_with(&marker_space) {
+                        &rest[marker_space.len()..]
+                    } else if rest.starts_with(marker) {
+                        &rest[marker.len()..]
+                    } else {
+                        rest
+                    }
+                };
+                lines[idx] = format!("{}{} {}", leading_ws, marker, stripped);
             } else {
                 // Uncomment: remove marker and optional following space
                 let marker_space = format!("{} ", marker);
@@ -236,7 +260,7 @@ pub fn toggle_lines(
         }
 
         for line in lines[start..end].iter_mut() {
-            *line = format!("{}{}", comment_style.single_line, line);
+            *line = format!("{} {}", comment_style.single_line, line);
         }
     } else if !should_comment && is_commented {
         let prefix = format!("{} ", comment_style.single_line);

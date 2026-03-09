@@ -229,8 +229,8 @@ fn test_toggle_lines_comment() {
     };
     let mut lines = vec!["hello".to_string(), "world".to_string()];
     toggle_lines(&mut lines, 0, 2, None, &style).unwrap();
-    assert_eq!(lines[0], "#hello");
-    assert_eq!(lines[1], "#world");
+    assert_eq!(lines[0], "# hello");
+    assert_eq!(lines[1], "# world");
 }
 
 #[test]
@@ -251,7 +251,7 @@ fn test_toggle_lines_force_on() {
     };
     let mut lines = vec!["hello".to_string()];
     toggle_lines(&mut lines, 0, 1, Some(true), &style).unwrap();
-    assert_eq!(lines[0], "#hello");
+    assert_eq!(lines[0], "# hello");
 }
 
 #[test]
