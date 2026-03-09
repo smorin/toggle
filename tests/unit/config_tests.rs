@@ -22,7 +22,11 @@ single_line_delimiter = "//"
 
     let langs = config.language.unwrap();
     assert_eq!(
-        langs.get("python").unwrap().single_line_delimiter.as_deref(),
+        langs
+            .get("python")
+            .unwrap()
+            .single_line_delimiter
+            .as_deref(),
         Some("#")
     );
     assert_eq!(

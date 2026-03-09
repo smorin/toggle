@@ -165,6 +165,7 @@ fn toggle_comments_inner(
             }
         };
 
+        #[allow(clippy::needless_range_loop)]
         for idx in start..end {
             if protected.contains(&idx) {
                 continue;
@@ -180,24 +181,22 @@ fn toggle_comments_inner(
 
             if should_comment {
                 // Strip existing comment marker first to avoid double-commenting
-                let stripped = {
-                    let marker_space = format!("{} ", marker);
-                    if rest.starts_with(&marker_space) {
-                        &rest[marker_space.len()..]
-                    } else if rest.starts_with(marker) {
-                        &rest[marker.len()..]
-                    } else {
-                        rest
-                    }
+                let marker_space = format!("{} ", marker);
+                let stripped = if let Some(s) = rest.strip_prefix(&marker_space) {
+                    s
+                } else if let Some(s) = rest.strip_prefix(marker) {
+                    s
+                } else {
+                    rest
                 };
                 lines[idx] = format!("{}{} {}", leading_ws, marker, stripped);
             } else {
                 // Uncomment: remove marker and optional following space
                 let marker_space = format!("{} ", marker);
-                if rest.starts_with(&marker_space) {
-                    lines[idx] = format!("{}{}", leading_ws, &rest[marker_space.len()..]);
-                } else if rest.starts_with(marker) {
-                    lines[idx] = format!("{}{}", leading_ws, &rest[marker.len()..]);
+                if let Some(s) = rest.strip_prefix(&marker_space) {
+                    lines[idx] = format!("{}{}", leading_ws, s);
+                } else if let Some(s) = rest.strip_prefix(marker) {
+                    lines[idx] = format!("{}{}", leading_ws, s);
                 }
             }
         }
@@ -273,16 +272,35 @@ pub fn get_comment_style(
 
     let mut comment_styles = HashMap::new();
     // Hash-style comments
-    for ext in &["py", "sh", "rb", "yaml", "yml", "toml", "r", "ex", "exs", "pl", "pm"] {
-        comment_styles.insert(*ext, CommentStyle { single_line: "#".to_string() });
+    for ext in &[
+        "py", "sh", "rb", "yaml", "yml", "toml", "r", "ex", "exs", "pl", "pm",
+    ] {
+        comment_styles.insert(
+            *ext,
+            CommentStyle {
+                single_line: "#".to_string(),
+            },
+        );
     }
     // Slash-style comments
-    for ext in &["js", "jsx", "ts", "tsx", "rs", "java", "c", "cpp", "go", "swift", "kt", "scala", "php"] {
-        comment_styles.insert(*ext, CommentStyle { single_line: "//".to_string() });
+    for ext in &[
+        "js", "jsx", "ts", "tsx", "rs", "java", "c", "cpp", "go", "swift", "kt", "scala", "php",
+    ] {
+        comment_styles.insert(
+            *ext,
+            CommentStyle {
+                single_line: "//".to_string(),
+            },
+        );
     }
     // Dash-style comments
     for ext in &["lua", "hs", "sql"] {
-        comment_styles.insert(*ext, CommentStyle { single_line: "--".to_string() });
+        comment_styles.insert(
+            *ext,
+            CommentStyle {
+                single_line: "--".to_string(),
+            },
+        );
     }
 
     comment_styles
@@ -294,7 +312,7 @@ pub fn get_comment_style(
 /// Find section markers and toggle the content between them.
 /// Returns true if the file was modified.
 pub fn find_and_toggle_section(
-    lines: &mut Vec<String>,
+    lines: &mut [String],
     section_id: &str,
     force: &Option<String>,
     comment_style: &CommentStyle,
