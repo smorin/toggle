@@ -64,7 +64,7 @@ fn process_path(path: &Path, cli: &Cli) -> Result<()> {
         let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
         if ext != "py" {
             return Err(anyhow!(
-                "File '{}' is not a .py file (use --strict-ext to enforce Python-only)",
+                "File '{}' is not a .py file (rejected by --strict-ext)",
                 path.display()
             ));
         }
@@ -134,6 +134,7 @@ fn toggle_section(
         );
     }
 
+    let original_content = io::read_file(path)?;
     let mut lines = io::read_lines(path)?;
 
     if verbose {
@@ -146,7 +147,10 @@ fn toggle_section(
         if verbose {
             eprintln!("  File modified, writing changes back");
         }
-        let content = lines.join("\n") + "\n";
+        let mut content = lines.join("\n");
+        if original_content.ends_with('\n') {
+            content.push('\n');
+        }
         io::write_file(path, &content, temp_suffix)?;
     } else if verbose {
         eprintln!("  No changes made to file");

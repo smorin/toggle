@@ -88,12 +88,3 @@ pub fn read_lines(path: &Path) -> Result<Vec<String>> {
     let lines: Vec<String> = reader.lines().collect::<io::Result<_>>()?;
     Ok(lines)
 }
-
-/// Write a Vec of lines back to a file
-pub fn write_lines(path: &Path, lines: &[String]) -> Result<()> {
-    let mut file = File::create(path)?;
-    for line in lines {
-        writeln!(file, "{}", line)?;
-    }
-    Ok(())
-}
