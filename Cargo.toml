@@ -26,6 +26,12 @@ anyhow = "1.0"
 walkdir = "2.4"
 # Temporary file handling
 tempfile = "3.8"
+# Diff generation for --dry-run
+similar = "2"
+# Config file parsing
+toml = "0.8"
+# Serialization/deserialization
+serde = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
 # For benchmarking

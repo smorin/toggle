@@ -57,4 +57,16 @@ pub struct Cli {
     /// Map exit codes to sysexits.h values
     #[arg(short = 'x', long = "posix-exit")]
     pub posix_exit: bool,
+
+    /// Show diff of changes without writing files
+    #[arg(long = "dry-run")]
+    pub dry_run: bool,
+
+    /// Create backup with given extension before modifying (e.g. --backup .bak)
+    #[arg(long = "backup")]
+    pub backup: Option<String>,
+
+    /// Path to .toggleConfig TOML file
+    #[arg(long = "config")]
+    pub config: Option<PathBuf>,
 }

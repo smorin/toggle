@@ -2,7 +2,8 @@
 
 use std::fs::File;
 use std::io::{self, Read, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use similar::TextDiff;
 use tempfile::NamedTempFile;
 
 /// Read file content with encoding detection
@@ -37,6 +38,30 @@ pub fn write_file(path: &Path, content: &str, temp_suffix: Option<&str>) -> io::
         tmp.persist(path).map_err(|e| e.error)?;
     }
 
+    Ok(())
+}
+
+/// Print a unified diff between original and modified content.
+/// No-ops if content is identical.
+pub fn print_diff(path: &Path, original: &str, modified: &str) {
+    if original == modified {
+        return;
+    }
+    let diff = TextDiff::from_lines(original, modified);
+    let path_str = path.display().to_string();
+    print!(
+        "{}",
+        diff.unified_diff()
+            .header(&format!("a/{}", path_str), &format!("b/{}", path_str))
+    );
+}
+
+/// Create a backup copy of a file by appending the given extension.
+/// e.g., create_backup("file.py", ".bak") creates "file.py.bak"
+pub fn create_backup(path: &Path, extension: &str) -> io::Result<()> {
+    let mut backup_path = path.as_os_str().to_os_string();
+    backup_path.push(extension);
+    std::fs::copy(path, PathBuf::from(backup_path))?;
     Ok(())
 }
 

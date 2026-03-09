@@ -3,6 +3,7 @@ use clap::Parser;
 use std::path::Path;
 
 use toggle::cli::Cli;
+use toggle::config::ToggleConfig;
 use toggle::core;
 use toggle::exit_codes::{ExitCode, UsageError};
 use toggle::io;
@@ -47,14 +48,49 @@ fn classify_error(err: &anyhow::Error) -> ExitCode {
 }
 
 fn run(cli: &Cli) -> Result<()> {
+    let config = if let Some(config_path) = &cli.config {
+        Some(ToggleConfig::load(config_path)?)
+    } else {
+        None
+    };
+
+    // CLI flags override config values
+    let effective_mode = if cli.mode == "auto" {
+        config
+            .as_ref()
+            .and_then(|c| c.global.as_ref())
+            .and_then(|g| g.default_mode.as_deref())
+            .unwrap_or("auto")
+            .to_string()
+    } else {
+        cli.mode.clone()
+    };
+
+    let effective_force = if cli.force.is_some() {
+        cli.force.clone()
+    } else {
+        config
+            .as_ref()
+            .and_then(|c| c.global.as_ref())
+            .and_then(|g| g.force_state.as_deref())
+            .filter(|&s| s != "none")
+            .map(String::from)
+    };
+
     for path in &cli.paths {
-        process_path(path, cli)
+        process_path(path, cli, config.as_ref(), &effective_mode, &effective_force)
             .with_context(|| format!("Failed to process {}", path.display()))?;
     }
     Ok(())
 }
 
-fn process_path(path: &Path, cli: &Cli) -> Result<()> {
+fn process_path(
+    path: &Path,
+    cli: &Cli,
+    config: Option<&ToggleConfig>,
+    effective_mode: &str,
+    effective_force: &Option<String>,
+) -> Result<()> {
     // --strict-ext: reject non-.py files
     if cli.strict_ext {
         let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
@@ -75,14 +111,33 @@ fn process_path(path: &Path, cli: &Cli) -> Result<()> {
         if cli.verbose {
             eprintln!("  Line range: {}", line_range);
         }
-        toggle_line_range(path, line_range, &cli.force, &cli.mode, cli.temp_suffix.as_deref())?;
+        toggle_line_range(
+            path,
+            line_range,
+            effective_force,
+            effective_mode,
+            cli.temp_suffix.as_deref(),
+            cli.dry_run,
+            cli.backup.as_deref(),
+            config,
+        )?;
     }
 
     for section in &cli.sections {
         if cli.verbose {
             eprintln!("  Section: {}", section);
         }
-        toggle_section(path, section, &cli.force, &cli.mode, cli.verbose, cli.temp_suffix.as_deref())?;
+        toggle_section(
+            path,
+            section,
+            effective_force,
+            effective_mode,
+            cli.verbose,
+            cli.temp_suffix.as_deref(),
+            cli.dry_run,
+            cli.backup.as_deref(),
+            config,
+        )?;
     }
 
     Ok(())
@@ -94,8 +149,11 @@ fn toggle_line_range(
     force: &Option<String>,
     mode: &str,
     temp_suffix: Option<&str>,
+    dry_run: bool,
+    backup: Option<&str>,
+    config: Option<&ToggleConfig>,
 ) -> Result<()> {
-    let comment_style = core::get_comment_style(path, mode)?;
+    let comment_style = core::get_comment_style(path, mode, config)?;
     let (start_line, end_line) = core::parse_line_range(line_range)?;
     let content = io::read_file(path)?;
 
@@ -118,7 +176,14 @@ fn toggle_line_range(
         &comment_style.single_line,
     );
 
-    io::write_file(path, &result, temp_suffix)?;
+    if dry_run {
+        io::print_diff(path, &content, &result);
+    } else {
+        if let Some(ext) = backup {
+            io::create_backup(path, ext)?;
+        }
+        io::write_file(path, &result, temp_suffix)?;
+    }
 
     Ok(())
 }
@@ -130,8 +195,11 @@ fn toggle_section(
     mode: &str,
     verbose: bool,
     temp_suffix: Option<&str>,
+    dry_run: bool,
+    backup: Option<&str>,
+    config: Option<&ToggleConfig>,
 ) -> Result<()> {
-    let comment_style = core::get_comment_style(path, mode)?;
+    let comment_style = core::get_comment_style(path, mode, config)?;
 
     if verbose {
         eprintln!("  Looking for section with ID={}", section_id);
@@ -158,7 +226,14 @@ fn toggle_section(
         if original_content.ends_with('\n') {
             content.push('\n');
         }
-        io::write_file(path, &content, temp_suffix)?;
+        if dry_run {
+            io::print_diff(path, &original_content, &content);
+        } else {
+            if let Some(ext) = backup {
+                io::create_backup(path, ext)?;
+            }
+            io::write_file(path, &content, temp_suffix)?;
+        }
     } else if verbose {
         eprintln!("  No changes made to file");
     }
