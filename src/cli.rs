@@ -1,69 +1,60 @@
-// Command-line interface parsing for the Toggle CLI
+// Command-line interface for the Toggle CLI
 
-/// Command line arguments structure
-#[derive(Debug)]
-pub struct Args {
-    pub line_ranges: Vec<String>,
+use clap::Parser;
+use std::path::PathBuf;
+
+#[derive(Parser)]
+#[command(author, version, about)]
+pub struct Cli {
+    /// File or directory paths to process
+    #[arg(required = true)]
+    pub paths: Vec<PathBuf>,
+
+    /// Line range in format <start_line>:<end_line> or <start_line>:+<count>
+    #[arg(short = 'l', long = "line")]
+    pub line: Option<String>,
+
+    /// Section ID to toggle
+    #[arg(short = 'S', long = "section", action = clap::ArgAction::Append)]
+    pub sections: Vec<String>,
+
+    /// Force toggle state (on/off)
+    #[arg(short = 'f', long = "force")]
     pub force: Option<String>,
-    pub temp_suffix: Option<String>,
-    pub encoding: Option<String>,
+
+    /// Comment mode (auto/single/multi)
+    #[arg(short = 'm', long = "mode", default_value = "auto")]
+    pub mode: String,
+
+    /// Human-readable log lines to stderr
+    #[arg(short = 'v', long = "verbose")]
     pub verbose: bool,
+
+    /// Machine-readable single-line JSON to stdout
+    #[arg(long = "json")]
     pub json: bool,
+
+    /// Extension for atomic temp file
+    #[arg(short = 't', long = "temp-suffix")]
+    pub temp_suffix: Option<String>,
+
+    /// Override file codec (UTF-8 only in Phase 0)
+    #[arg(short = 'e', long = "encoding", default_value = "utf-8")]
+    pub encoding: String,
+
+    /// Error if target is not .py
+    #[arg(long = "strict-ext")]
     pub strict_ext: bool,
+
+    /// Operate on symlink itself instead of target
+    #[arg(short = 'N', long = "no-dereference")]
     pub no_dereference: bool,
+
+    /// EOL normalization: preserve, lf, or crlf
+    #[arg(long = "eol", default_value = "preserve")]
     pub eol: String,
+
+    /// Map exit codes to sysexits.h values
+    #[arg(short = 'x', long = "posix-exit")]
     pub posix_exit: bool,
-    pub files: Vec<String>,
-}
-
-impl Default for Args {
-    fn default() -> Self {
-        Self {
-            line_ranges: Vec::new(),
-            force: None,
-            temp_suffix: None,
-            encoding: None,
-            verbose: false,
-            json: false,
-            strict_ext: false,
-            no_dereference: false,
-            eol: "preserve".to_string(),
-            posix_exit: false,
-            files: Vec::new(),
-        }
-    }
-}
-
-/// Parse command line arguments
-pub fn parse_args(_args: &[String]) -> Result<Args, String> {
-    // Placeholder for argument parsing
-    // Will implement proper parsing in a future task
-
-    // Return default args for now
-    Ok(Args::default())
-}
-
-/// Print help message
-pub fn print_help() {
-    println!("toggle - Comment/uncomment lines in text files");
-    println!("Usage: toggle [OPTIONS] <FILE>");
-    println!();
-    println!("Options:");
-    println!("  -l, --line <range>       Line range (required) in format N:M or N:+K");
-    println!("  -f, --force <on|off>     Force commenting or uncommenting instead of toggling");
-    println!("  -t, --temp-suffix <ext>  Use specified suffix for temporary files");
-    println!("  -e, --encoding <n>       Specify file encoding (only UTF-8 supported in Phase 0)");
-    println!("  -v, --verbose            Enable verbose output");
-    println!("  --json                   Output results as JSON");
-    println!("  --strict-ext             Only process files with recognized extensions");
-    println!("  -N, --no-dereference     Don't follow symlinks");
-    println!("  --eol <preserve|lf|crlf> Line ending handling");
-    println!("  -x, --posix-exit         Use POSIX-compatible exit codes");
-    println!("  --help                   Print help information");
-    println!("  --version                Print version information");
-}
-
-/// Print version information
-pub fn print_version() {
-    println!("toggle {}", env!("CARGO_PKG_VERSION"));
 }
