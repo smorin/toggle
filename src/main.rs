@@ -166,6 +166,14 @@ fn toggle_line_range(
         ))
         .into());
     }
+    if end_line > line_count {
+        return Err(UsageError(format!(
+            "End line {} is out of range (file has {} lines)",
+            end_line,
+            line_count
+        ))
+        .into());
+    }
 
     let range = core::LineRange::new(start_line, end_line);
     let force_mode = force.as_deref();

@@ -346,7 +346,7 @@ pub fn find_and_toggle_section(
                     toggled_lines.pop();
                 }
                 let section_len = section_end - section_start;
-                debug_assert_eq!(
+                assert_eq!(
                     toggled_lines.len(),
                     section_len,
                     "Toggled line count ({}) must match section span ({})",
