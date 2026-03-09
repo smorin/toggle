@@ -54,20 +54,113 @@ pub fn parse_line_range(range_spec: &str) -> Result<(usize, usize)> {
     }
 }
 
-/// Merge multiple line ranges into a minimal list of non-overlapping ranges
+/// Merge multiple line ranges into a minimal list of non-overlapping ranges.
+/// Sorts ascending by start, then coalesces overlapping/adjacent intervals.
 pub fn merge_ranges(ranges: &[LineRange]) -> Vec<LineRange> {
-    // Placeholder for range merging algorithm
-    // Will implement the actual algorithm in a future task
-    let _ = ranges;
-    Vec::new()
+    if ranges.is_empty() {
+        return Vec::new();
+    }
+
+    let mut sorted: Vec<LineRange> = ranges.to_vec();
+    sorted.sort_by(|a, b| a.start.cmp(&b.start).then(a.end.cmp(&b.end)));
+
+    let mut merged = vec![sorted[0].clone()];
+
+    for range in &sorted[1..] {
+        let last = merged.last_mut().unwrap();
+        if range.start <= last.end + 1 {
+            last.end = last.end.max(range.end);
+        } else {
+            merged.push(range.clone());
+        }
+    }
+
+    merged
 }
 
-/// Toggle comments in the specified line ranges
+/// Toggle comments in the specified line ranges.
+/// Uses `#` as the comment marker (Python-style per Phase 0 PRD).
+/// `force_mode`: `Some("on")` = always comment, `Some("off")` = always uncomment, `None` = invert.
 pub fn toggle_comments(content: &str, ranges: &[LineRange], force_mode: Option<&str>) -> String {
-    // Placeholder for comment toggling logic
-    // Will implement the actual algorithm in a future task
-    let _ = (ranges, force_mode);
-    content.to_string()
+    let mut lines: Vec<String> = content.lines().map(String::from).collect();
+    let protected = crate::io::detect_protected_lines(content);
+    let merged = merge_ranges(ranges);
+    let marker = "#";
+
+    for range in &merged {
+        // Convert 1-based inclusive range to 0-based indices
+        let start = range.start.saturating_sub(1);
+        let end = range.end.min(lines.len());
+
+        if start >= lines.len() {
+            continue;
+        }
+
+        // Determine current state for invert mode: check if majority of
+        // non-empty, non-protected lines are commented
+        let should_comment = match force_mode {
+            Some("on") => true,
+            Some("off") => false,
+            _ => {
+                // Invert: check if lines are currently commented
+                let commented_count = lines[start..end]
+                    .iter()
+                    .enumerate()
+                    .filter(|(i, line)| {
+                        let abs_idx = start + i;
+                        !protected.contains(&abs_idx) && !line.trim().is_empty()
+                    })
+                    .filter(|(_, line)| {
+                        let trimmed = line.trim_start();
+                        trimmed.starts_with(marker)
+                    })
+                    .count();
+                let total_non_empty = lines[start..end]
+                    .iter()
+                    .enumerate()
+                    .filter(|(i, line)| {
+                        let abs_idx = start + i;
+                        !protected.contains(&abs_idx) && !line.trim().is_empty()
+                    })
+                    .count();
+                // If all non-empty lines are commented, uncomment (false); otherwise comment (true)
+                !(commented_count > 0 && commented_count == total_non_empty)
+            }
+        };
+
+        for idx in start..end {
+            if protected.contains(&idx) {
+                continue;
+            }
+
+            let line = &lines[idx];
+            if line.trim().is_empty() {
+                continue;
+            }
+
+            let leading_ws: String = line.chars().take_while(|c| c.is_whitespace()).collect();
+            let rest = &line[leading_ws.len()..];
+
+            if should_comment {
+                // Comment: insert "# " at first non-whitespace
+                lines[idx] = format!("{}{} {}", leading_ws, marker, rest);
+            } else {
+                // Uncomment: remove "#" and optional following space
+                if rest.starts_with(&format!("{} ", marker)) {
+                    lines[idx] = format!("{}{}", leading_ws, &rest[2..]);
+                } else if rest.starts_with(marker) {
+                    lines[idx] = format!("{}{}", leading_ws, &rest[1..]);
+                }
+            }
+        }
+    }
+
+    // Preserve trailing newline if original had one
+    let mut result = lines.join("\n");
+    if content.ends_with('\n') {
+        result.push('\n');
+    }
+    result
 }
 
 /// Get the comment style for a file based on its extension
@@ -75,14 +168,18 @@ pub fn get_comment_style(path: &Path, _mode: &str) -> Result<CommentStyle> {
     let extension = path.extension().and_then(|ext| ext.to_str()).unwrap_or("");
 
     let mut comment_styles = HashMap::new();
-    comment_styles.insert("py", CommentStyle { single_line: "#".to_string() });
-    comment_styles.insert("js", CommentStyle { single_line: "//".to_string() });
-    comment_styles.insert("rs", CommentStyle { single_line: "//".to_string() });
-    comment_styles.insert("java", CommentStyle { single_line: "//".to_string() });
-    comment_styles.insert("c", CommentStyle { single_line: "//".to_string() });
-    comment_styles.insert("cpp", CommentStyle { single_line: "//".to_string() });
-    comment_styles.insert("sh", CommentStyle { single_line: "#".to_string() });
-    comment_styles.insert("rb", CommentStyle { single_line: "#".to_string() });
+    // Hash-style comments
+    for ext in &["py", "sh", "rb", "yaml", "yml", "toml", "r", "ex", "exs", "pl", "pm"] {
+        comment_styles.insert(*ext, CommentStyle { single_line: "#".to_string() });
+    }
+    // Slash-style comments
+    for ext in &["js", "jsx", "ts", "tsx", "rs", "java", "c", "cpp", "go", "swift", "kt", "scala", "php"] {
+        comment_styles.insert(*ext, CommentStyle { single_line: "//".to_string() });
+    }
+    // Dash-style comments
+    for ext in &["lua", "hs", "sql"] {
+        comment_styles.insert(*ext, CommentStyle { single_line: "--".to_string() });
+    }
 
     comment_styles
         .get(extension)

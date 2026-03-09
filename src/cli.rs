@@ -25,4 +25,36 @@ pub struct Cli {
     /// Comment mode (auto/single/multi)
     #[arg(short = 'm', long = "mode", default_value = "auto")]
     pub mode: String,
+
+    /// Human-readable log lines to stderr
+    #[arg(short = 'v', long = "verbose")]
+    pub verbose: bool,
+
+    /// Machine-readable single-line JSON to stdout
+    #[arg(long = "json")]
+    pub json: bool,
+
+    /// Extension for atomic temp file
+    #[arg(short = 't', long = "temp-suffix")]
+    pub temp_suffix: Option<String>,
+
+    /// Override file codec (UTF-8 only in Phase 0)
+    #[arg(short = 'e', long = "encoding", default_value = "utf-8")]
+    pub encoding: String,
+
+    /// Error if target is not .py
+    #[arg(long = "strict-ext")]
+    pub strict_ext: bool,
+
+    /// Operate on symlink itself instead of target
+    #[arg(short = 'N', long = "no-dereference")]
+    pub no_dereference: bool,
+
+    /// EOL normalization: preserve, lf, or crlf
+    #[arg(long = "eol", default_value = "preserve")]
+    pub eol: String,
+
+    /// Map exit codes to sysexits.h values
+    #[arg(short = 'x', long = "posix-exit")]
+    pub posix_exit: bool,
 }

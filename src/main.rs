@@ -4,37 +4,63 @@ use std::path::Path;
 
 use toggle::cli::Cli;
 use toggle::core;
+use toggle::exit_codes::ExitCode;
 use toggle::io;
 
-fn main() -> Result<()> {
+fn main() {
     let cli = Cli::parse();
 
-    for path in &cli.paths {
-        process_path(path, &cli)
-            .with_context(|| format!("Failed to process {}", path.display()))?;
+    let result = run(&cli);
+    let code = match &result {
+        Ok(_) => ExitCode::Success,
+        Err(_) => ExitCode::ToggleError,
+    };
+
+    if let Err(e) = &result {
+        eprintln!("Error: {:#}", e);
     }
 
+    let exit_val = if cli.posix_exit { code.posix() } else { code.code() };
+    std::process::exit(exit_val);
+}
+
+fn run(cli: &Cli) -> Result<()> {
+    for path in &cli.paths {
+        process_path(path, cli)
+            .with_context(|| format!("Failed to process {}", path.display()))?;
+    }
     Ok(())
 }
 
 fn process_path(path: &Path, cli: &Cli) -> Result<()> {
-    println!("Processing {}:", path.display());
+    // --strict-ext: reject non-.py files
+    if cli.strict_ext {
+        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+        if ext != "py" {
+            return Err(anyhow!(
+                "File '{}' is not a .py file (use --strict-ext to enforce Python-only)",
+                path.display()
+            ));
+        }
+    }
+
+    if cli.verbose {
+        eprintln!("Processing {}:", path.display());
+    }
 
     if let Some(line_range) = &cli.line {
-        println!("  Line range: {}", line_range);
+        if cli.verbose {
+            eprintln!("  Line range: {}", line_range);
+        }
         toggle_line_range(path, line_range, &cli.force, &cli.mode)?;
     }
 
     for section in &cli.sections {
-        println!("  Section: {}", section);
+        if cli.verbose {
+            eprintln!("  Section: {}", section);
+        }
         toggle_section(path, section, &cli.force, &cli.mode)?;
     }
-
-    if let Some(force) = &cli.force {
-        println!("  Force: {}", force);
-    }
-
-    println!("  Mode: {}", cli.mode);
 
     Ok(())
 }

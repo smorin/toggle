@@ -3,7 +3,6 @@ use std::fs::File;
 use std::io::{self, Read, Write};
 use std::path::Path;
 use toggle::core::{toggle_comments, LineRange};
-use toggle::toggle;
 
 // Create a fixture file with alternating commented and uncommented lines
 fn create_fixture_file(path: &Path, num_lines: usize) -> io::Result<()> {
@@ -55,11 +54,5 @@ fn bench_toggle_comments(c: &mut Criterion) {
     });
 }
 
-fn toggle_benchmark(c: &mut Criterion) {
-    c.bench_function("toggle empty", |b| {
-        b.iter(|| toggle(&["test.py".to_string()]))
-    });
-}
-
-criterion_group!(benches, bench_toggle_comments, toggle_benchmark);
+criterion_group!(benches, bench_toggle_comments);
 criterion_main!(benches);
