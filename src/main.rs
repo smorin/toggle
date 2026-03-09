@@ -1,10 +1,10 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use clap::Parser;
 use std::path::Path;
 
 use toggle::cli::Cli;
 use toggle::core;
-use toggle::exit_codes::ExitCode;
+use toggle::exit_codes::{ExitCode, UsageError};
 use toggle::io;
 
 fn main() {
@@ -33,27 +33,14 @@ fn main() {
 }
 
 fn classify_error(err: &anyhow::Error) -> ExitCode {
-    // Walk the error chain looking for specific error types
+    // Walk the error chain looking for specific typed errors
     for cause in err.chain() {
         if cause.downcast_ref::<std::io::Error>().is_some() {
             return ExitCode::IoError;
         }
-    }
-
-    // Check error message for usage-related patterns
-    let msg = format!("{:#}", err);
-    if msg.contains("Invalid start line")
-        || msg.contains("Invalid end line")
-        || msg.contains("Invalid line number")
-        || msg.contains("Invalid line count")
-        || msg.contains("End line")
-        || msg.contains("Line number must be")
-        || msg.contains("Start line must be")
-        || msg.contains("is not a .py file")
-        || msg.contains("out of range")
-        || msg.contains("Unsupported file extension")
-    {
-        return ExitCode::Usage;
+        if cause.downcast_ref::<UsageError>().is_some() {
+            return ExitCode::Usage;
+        }
     }
 
     ExitCode::ToggleError
@@ -72,10 +59,11 @@ fn process_path(path: &Path, cli: &Cli) -> Result<()> {
     if cli.strict_ext {
         let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
         if ext != "py" {
-            return Err(anyhow!(
+            return Err(UsageError(format!(
                 "File '{}' is not a .py file (rejected by --strict-ext)",
                 path.display()
-            ));
+            ))
+            .into());
         }
     }
 
@@ -113,11 +101,12 @@ fn toggle_line_range(
 
     let line_count = content.lines().count();
     if start_line > line_count {
-        return Err(anyhow!(
+        return Err(UsageError(format!(
             "Start line {} is out of range (file has {} lines)",
             start_line,
             line_count
-        ));
+        ))
+        .into());
     }
 
     let range = core::LineRange::new(start_line, end_line);

@@ -1,5 +1,6 @@
 use toggle::core::{
-    get_comment_style, merge_ranges, parse_line_range, toggle_comments, LineRange,
+    find_and_toggle_section, get_comment_style, merge_ranges, parse_line_range, toggle_comments,
+    CommentStyle, LineRange,
 };
 
 // ── parse_line_range ──
@@ -221,4 +222,26 @@ fn test_get_comment_style_shell() {
 #[test]
 fn test_get_comment_style_unsupported() {
     assert!(get_comment_style(std::path::Path::new("test.xyz"), "auto").is_err());
+}
+
+// ── Section toggle with trailing empty lines (Issue 23) ──
+
+#[test]
+fn test_section_toggle_preserves_trailing_empty_lines() {
+    let style = CommentStyle {
+        single_line: "#".to_string(),
+    };
+    let mut lines = vec![
+        "# toggle:start ID=sec1".to_string(),
+        "hello".to_string(),
+        "".to_string(),
+        "world".to_string(),
+        "# toggle:end ID=sec1".to_string(),
+    ];
+    let result = find_and_toggle_section(&mut lines, "sec1", &None, &style).unwrap();
+    assert!(result, "section should be modified");
+    // The empty line should remain empty (not be replaced by stale data)
+    assert_eq!(lines[1], "# hello");
+    assert_eq!(lines[2], "");
+    assert_eq!(lines[3], "# world");
 }

@@ -1,8 +1,10 @@
 // Toggle algorithm implementation
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use std::collections::HashMap;
 use std::path::Path;
+
+use crate::exit_codes::UsageError;
 
 /// Line range representation
 #[derive(Debug, Clone)]
@@ -30,29 +32,29 @@ pub fn parse_line_range(range_spec: &str) -> Result<(usize, usize)> {
     if let Some((start, end)) = range_spec.split_once(':') {
         let start_line = start
             .parse::<usize>()
-            .map_err(|_| anyhow!("Invalid start line: {}", start))?;
+            .map_err(|_| UsageError(format!("Invalid start line: {}", start)))?;
 
         if start_line == 0 {
-            return Err(anyhow!("Start line must be >= 1, got 0"));
+            return Err(UsageError("Start line must be >= 1, got 0".into()).into());
         }
 
         if let Some(stripped_end) = end.strip_prefix('+') {
             // Format: start:+count
             let count = stripped_end
                 .parse::<usize>()
-                .map_err(|_| anyhow!("Invalid line count: {}", stripped_end))?;
+                .map_err(|_| UsageError(format!("Invalid line count: {}", stripped_end)))?;
             Ok((start_line, start_line + count))
         } else {
             // Format: start:end
             let end_line = end
                 .parse::<usize>()
-                .map_err(|_| anyhow!("Invalid end line: {}", end))?;
+                .map_err(|_| UsageError(format!("Invalid end line: {}", end)))?;
             if end_line < start_line {
-                return Err(anyhow!(
+                return Err(UsageError(format!(
                     "End line {} is less than start line {}",
-                    end_line,
-                    start_line
-                ));
+                    end_line, start_line
+                ))
+                .into());
             }
             Ok((start_line, end_line))
         }
@@ -60,9 +62,9 @@ pub fn parse_line_range(range_spec: &str) -> Result<(usize, usize)> {
         // Single line
         let line = range_spec
             .parse::<usize>()
-            .map_err(|_| anyhow!("Invalid line number: {}", range_spec))?;
+            .map_err(|_| UsageError(format!("Invalid line number: {}", range_spec)))?;
         if line == 0 {
-            return Err(anyhow!("Line number must be >= 1, got 0"));
+            return Err(UsageError("Line number must be >= 1, got 0".into()).into());
         }
         Ok((line, line))
     }
@@ -229,7 +231,7 @@ pub fn get_comment_style(path: &Path, _mode: &str) -> Result<CommentStyle> {
     comment_styles
         .get(extension)
         .cloned()
-        .ok_or_else(|| anyhow!("Unsupported file extension: .{}", extension))
+        .ok_or_else(|| UsageError(format!("Unsupported file extension: .{}", extension)).into())
 }
 
 /// Find section markers and toggle the content between them.
@@ -277,10 +279,27 @@ pub fn find_and_toggle_section(
                     &[],
                 );
 
-                // Splice toggled lines back in
-                let toggled_lines: Vec<String> = toggled.lines().map(String::from).collect();
+                // Splice toggled lines back in.
+                // Use split('\n') instead of lines() to preserve trailing empty
+                // elements that lines() would drop (lossy roundtrip fix).
+                let mut toggled_lines: Vec<&str> = toggled.split('\n').collect();
+                // toggle_comments_inner appends '\n' when input ends with '\n',
+                // which produces a spurious trailing empty element via split.
+                if toggled_lines.last() == Some(&"") && toggled.ends_with('\n') {
+                    toggled_lines.pop();
+                }
+                let section_len = section_end - section_start;
+                debug_assert_eq!(
+                    toggled_lines.len(),
+                    section_len,
+                    "Toggled line count ({}) must match section span ({})",
+                    toggled_lines.len(),
+                    section_len,
+                );
                 for (offset, new_line) in toggled_lines.iter().enumerate() {
-                    lines[section_start + offset] = new_line.clone();
+                    if offset < section_len {
+                        lines[section_start + offset] = (*new_line).to_string();
+                    }
                 }
 
                 modified = true;

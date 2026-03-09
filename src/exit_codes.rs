@@ -1,3 +1,19 @@
+use std::fmt;
+
+/// Typed error for bad CLI input / range errors (maps to ExitCode::Usage).
+/// Use this instead of bare `anyhow!()` for usage errors so that
+/// `classify_error` can downcast instead of matching on message strings.
+#[derive(Debug)]
+pub struct UsageError(pub String);
+
+impl fmt::Display for UsageError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for UsageError {}
+
 /// Exit codes per Phase 0 PRD §0.8
 #[derive(Debug, Clone, Copy)]
 pub enum ExitCode {
