@@ -30,7 +30,7 @@ fn test_parse_line_range_start_plus_count() {
 fn test_parse_line_range_single_line() {
     let (start, end) = parse_line_range("7").unwrap();
     assert_eq!(start, 7);
-    assert_eq!(end, 8);
+    assert_eq!(end, 7);
 }
 
 #[test]

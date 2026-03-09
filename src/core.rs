@@ -50,7 +50,7 @@ pub fn parse_line_range(range_spec: &str) -> Result<(usize, usize)> {
         let line = range_spec
             .parse::<usize>()
             .map_err(|_| anyhow!("Invalid line number: {}", range_spec))?;
-        Ok((line, line + 1))
+        Ok((line, line))
     }
 }
 
