@@ -34,11 +34,11 @@ impl ExitCode {
     /// Map to sysexits.h values for --posix-exit
     pub fn posix(self) -> i32 {
         match self {
-            Self::Success => 0,    // EX_OK
-            Self::Usage => 64,     // EX_USAGE
-            Self::IoError => 74,   // EX_IOERR
+            Self::Success => 0,      // EX_OK
+            Self::Usage => 64,       // EX_USAGE
+            Self::IoError => 74,     // EX_IOERR
             Self::ToggleError => 70, // EX_SOFTWARE
-            Self::Internal => 71,  // EX_OSERR
+            Self::Internal => 71,    // EX_OSERR
         }
     }
 

@@ -1,5 +1,6 @@
 use assert_cmd::Command;
 use predicates::prelude::*;
+use serde_json::Value;
 use std::fs;
 use tempfile::TempDir;
 
@@ -157,7 +158,10 @@ fn test_dry_run_shows_diff_and_does_not_modify_file() {
         .stdout(predicates::str::contains("+++"))
         .stdout(predicates::str::contains("@@"));
     let after = fs::read_to_string(&path).unwrap();
-    assert_eq!(original, after, "file should not be modified in dry-run mode");
+    assert_eq!(
+        original, after,
+        "file should not be modified in dry-run mode"
+    );
 }
 
 #[test]
@@ -196,7 +200,10 @@ fn test_backup_creates_backup_file() {
     let backup_path = path.with_file_name("test.py.bak");
     assert!(backup_path.exists(), "backup file should exist");
     let backup_content = fs::read_to_string(&backup_path).unwrap();
-    assert_eq!(backup_content, original, "backup should contain original content");
+    assert_eq!(
+        backup_content, original,
+        "backup should contain original content"
+    );
     let modified = fs::read_to_string(&path).unwrap();
     assert!(modified.contains("#"), "original file should be toggled");
 }
@@ -205,11 +212,21 @@ fn test_backup_creates_backup_file() {
 fn test_backup_with_dry_run_skips_backup() {
     let (_dir, path) = setup_temp_file("hello\nworld\n", "test.py");
     cmd()
-        .args([path.to_str().unwrap(), "-l", "1:2", "--backup", ".bak", "--dry-run"])
+        .args([
+            path.to_str().unwrap(),
+            "-l",
+            "1:2",
+            "--backup",
+            ".bak",
+            "--dry-run",
+        ])
         .assert()
         .success();
     let backup_path = path.with_file_name("test.py.bak");
-    assert!(!backup_path.exists(), "backup should not be created in dry-run mode");
+    assert!(
+        !backup_path.exists(),
+        "backup should not be created in dry-run mode"
+    );
 }
 
 // ── --config ──
@@ -239,7 +256,10 @@ single_line_delimiter = ";;"
         .assert()
         .success();
     let result = fs::read_to_string(&file_path).unwrap();
-    assert!(result.contains(";;"), "should use custom delimiter from config");
+    assert!(
+        result.contains(";;"),
+        "should use custom delimiter from config"
+    );
 }
 
 #[test]
@@ -269,7 +289,10 @@ force_state = "on"
         .assert()
         .success();
     let result = fs::read_to_string(&file_path).unwrap();
-    assert!(!result.contains("#"), "CLI --force off should override config force_state=on");
+    assert!(
+        !result.contains("#"),
+        "CLI --force off should override config force_state=on"
+    );
 }
 
 #[test]
@@ -312,7 +335,156 @@ force_state = "on"
         .assert()
         .success();
     let result = fs::read_to_string(&file_path).unwrap();
-    assert!(result.contains("# hello"), "config force_state=on should comment the line");
+    assert!(
+        result.contains("# hello"),
+        "config force_state=on should comment the line"
+    );
+}
+
+// ── --eol ──
+
+#[test]
+fn test_eol_lf_normalizes_crlf() {
+    let (_dir, path) = setup_temp_file("line1\r\nline2\r\n", "test.py");
+    cmd()
+        .args([path.to_str().unwrap(), "-l", "1:1", "--eol", "lf"])
+        .assert()
+        .success();
+    let result = fs::read(&path).unwrap();
+    assert!(
+        !result.windows(2).any(|w| w == b"\r\n"),
+        "should have no CRLF after --eol lf"
+    );
+}
+
+#[test]
+fn test_eol_crlf_normalizes_lf() {
+    let (_dir, path) = setup_temp_file("line1\nline2\n", "test.py");
+    cmd()
+        .args([path.to_str().unwrap(), "-l", "1:1", "--eol", "crlf"])
+        .assert()
+        .success();
+    let result = fs::read(&path).unwrap();
+    let content = String::from_utf8(result).unwrap();
+    assert!(
+        content.contains("\r\n"),
+        "should have CRLF after --eol crlf"
+    );
+}
+
+#[test]
+fn test_eol_preserve_keeps_original() {
+    let original = "line1\nline2\n";
+    let (_dir, path) = setup_temp_file(original, "test.py");
+    cmd()
+        .args([path.to_str().unwrap(), "-l", "1:1", "--eol", "preserve"])
+        .assert()
+        .success();
+    let result = fs::read(&path).unwrap();
+    // Verify no \r was introduced
+    assert!(!result.contains(&b'\r'), "preserve should not introduce CR");
+}
+
+// ── --no-dereference ──
+
+#[cfg(unix)]
+#[test]
+fn test_no_dereference_preserves_symlink() {
+    use std::os::unix::fs::symlink;
+    let dir = TempDir::new().unwrap();
+    let target = dir.path().join("target.py");
+    fs::write(&target, "hello\nworld\n").unwrap();
+    let link = dir.path().join("link.py");
+    symlink(&target, &link).unwrap();
+
+    cmd()
+        .args([link.to_str().unwrap(), "-l", "1:2", "-N"])
+        .assert()
+        .success();
+
+    // Symlink should still be a symlink
+    assert!(
+        link.symlink_metadata().unwrap().file_type().is_symlink(),
+        "symlink should be preserved with -N"
+    );
+    // Target file should be modified
+    let result = fs::read_to_string(&target).unwrap();
+    assert!(result.contains("#"), "target should be toggled");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_default_replaces_symlink() {
+    use std::os::unix::fs::symlink;
+    let dir = TempDir::new().unwrap();
+    let target = dir.path().join("target.py");
+    fs::write(&target, "hello\nworld\n").unwrap();
+    let link = dir.path().join("link.py");
+    symlink(&target, &link).unwrap();
+
+    cmd()
+        .args([link.to_str().unwrap(), "-l", "1:2"])
+        .assert()
+        .success();
+
+    // Without -N, the symlink gets replaced by the atomic rename
+    assert!(
+        !link.symlink_metadata().unwrap().file_type().is_symlink(),
+        "without -N, symlink should be replaced by a regular file"
+    );
+}
+
+#[test]
+fn test_eol_invalid_value_errors() {
+    let (_dir, path) = setup_temp_file("hello\n", "test.py");
+    cmd()
+        .args([path.to_str().unwrap(), "-l", "1:1", "--eol", "foo"])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains("Invalid --eol value"));
+}
+
+// ── --encoding ──
+
+#[test]
+fn test_encoding_latin1_roundtrip() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("test.py");
+    // "café\n" in Latin-1
+    fs::write(&path, &[0x63, 0x61, 0x66, 0xe9, 0x0a]).unwrap();
+    cmd()
+        .args([path.to_str().unwrap(), "-l", "1:1", "-e", "latin-1"])
+        .assert()
+        .success();
+    let bytes = fs::read(&path).unwrap();
+    // Should have comment marker "# " (0x23 0x20) before "café"
+    assert!(
+        bytes.windows(2).any(|w| w == [0x23, 0x20]),
+        "should have # comment marker"
+    );
+    // Should still contain the é character (0xe9) in Latin-1
+    assert!(bytes.contains(&0xe9), "should preserve Latin-1 encoding");
+}
+
+#[test]
+fn test_encoding_default_utf8() {
+    let (_dir, path) = setup_temp_file("hello\n", "test.py");
+    cmd()
+        .args([path.to_str().unwrap(), "-l", "1:1"])
+        .assert()
+        .success();
+    let result = fs::read_to_string(&path).unwrap();
+    assert!(result.contains("#"), "default UTF-8 should work as before");
+}
+
+#[test]
+fn test_encoding_invalid_errors() {
+    let (_dir, path) = setup_temp_file("hello\n", "test.py");
+    cmd()
+        .args([path.to_str().unwrap(), "-l", "1:1", "-e", "bogus-codec"])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains("Unsupported encoding"));
 }
 
 #[test]
@@ -345,4 +517,89 @@ single_line_delimiter = "%%"
         result.contains("%%"),
         "global single_line_delimiter should override default when no language-specific config"
     );
+}
+
+// ── --json ──
+
+#[test]
+fn test_json_output_valid_json() {
+    let (_dir, path) = setup_temp_file("hello\nworld\n", "test.py");
+    let output = cmd()
+        .args([path.to_str().unwrap(), "-l", "1:2", "--json"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let json: Value = serde_json::from_slice(&output.stdout).expect("stdout should be valid JSON");
+    assert!(json.is_array(), "JSON output should be an array");
+}
+
+#[test]
+fn test_json_output_contains_fields() {
+    let (_dir, path) = setup_temp_file("hello\nworld\n", "test.py");
+    let output = cmd()
+        .args([path.to_str().unwrap(), "-l", "1:2", "--json"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let json: Vec<Value> = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(json.len(), 1);
+    let entry = &json[0];
+    assert!(entry["file"].as_str().unwrap().contains("test.py"));
+    assert_eq!(entry["action"], "toggle_line_range");
+    assert!(entry["lines_changed"].as_u64().unwrap() > 0);
+    assert_eq!(entry["success"], true);
+    assert!(entry.get("error").is_none() || entry["error"].is_null());
+    assert_eq!(entry["dry_run"], false);
+}
+
+#[test]
+fn test_json_output_error_case() {
+    let output = cmd()
+        .args([
+            "/tmp/nonexistent_toggle_json_test.py",
+            "-l",
+            "1:1",
+            "--json",
+        ])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let json: Vec<Value> =
+        serde_json::from_slice(&output.stdout).expect("stdout should be valid JSON even on error");
+    assert_eq!(json.len(), 1);
+    assert_eq!(json[0]["success"], false);
+    assert!(json[0]["error"].as_str().unwrap().len() > 0);
+}
+
+#[test]
+fn test_json_suppresses_verbose() {
+    let (_dir, path) = setup_temp_file("hello\n", "test.py");
+    let output = cmd()
+        .args([path.to_str().unwrap(), "-l", "1:1", "--json", "-v"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    assert!(
+        output.stderr.is_empty(),
+        "verbose output should be suppressed in JSON mode"
+    );
+    // stdout should still be valid JSON
+    let _: Vec<Value> = serde_json::from_slice(&output.stdout).unwrap();
+}
+
+#[test]
+fn test_json_with_dry_run() {
+    let (_dir, path) = setup_temp_file("hello\nworld\n", "test.py");
+    let output = cmd()
+        .args([path.to_str().unwrap(), "-l", "1:2", "--json", "--dry-run"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    // stdout should be only JSON, no diff output mixed in
+    let json: Vec<Value> = serde_json::from_slice(&output.stdout)
+        .expect("stdout should be pure JSON with no diff mixed in");
+    assert_eq!(json[0]["dry_run"], true);
+    // File should not be modified
+    let after = fs::read_to_string(&path).unwrap();
+    assert_eq!(after, "hello\nworld\n");
 }
