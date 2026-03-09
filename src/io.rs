@@ -21,8 +21,11 @@ pub fn write_file(path: &Path, content: &str, temp_suffix: Option<&str>) -> io::
     let dir = path.parent().unwrap_or(Path::new("."));
 
     if let Some(suffix) = temp_suffix {
-        // Use explicit temp file name
-        let temp_path = path.with_extension(suffix);
+        // Use explicit temp file name: file.py.tmp (append suffix, not replace extension)
+        let mut temp_name = path.as_os_str().to_os_string();
+        temp_name.push(".");
+        temp_name.push(suffix);
+        let temp_path = std::path::PathBuf::from(temp_name);
         let mut file = File::create(&temp_path)?;
         file.write_all(content.as_bytes())?;
         file.sync_all()?;
@@ -44,9 +47,12 @@ pub fn has_utf8_bom(content: &[u8]) -> bool {
 }
 
 /// Detect lines that should never be toggled: shebang and encoding pragma.
+/// Only checks the first two non-blank lines (shebangs are only valid on line 1,
+/// PEP 263 encoding pragmas on lines 1-2).
 /// Returns 0-based line indices of protected lines.
 pub fn detect_protected_lines(content: &str) -> Vec<usize> {
     let mut protected = Vec::new();
+    let mut non_blank_seen = 0;
 
     for (i, line) in content.lines().enumerate() {
         let trimmed = line.trim();
@@ -54,21 +60,19 @@ pub fn detect_protected_lines(content: &str) -> Vec<usize> {
             continue;
         }
 
-        // Shebang: first non-blank line starting with #!
-        if trimmed.starts_with("#!") && !protected.iter().any(|&idx| {
-            content.lines().nth(idx).map_or(false, |l| l.trim().starts_with("#!"))
-        }) {
+        non_blank_seen += 1;
+        if non_blank_seen > 2 {
+            break;
+        }
+
+        // Shebang: must be first non-blank line
+        if non_blank_seen == 1 && trimmed.starts_with("#!") {
             protected.push(i);
         }
 
-        // PEP 263 encoding pragma: first non-blank line matching #.*coding[:=]
+        // PEP 263 encoding pragma: first or second non-blank line
         if trimmed.starts_with('#') && (trimmed.contains("coding:") || trimmed.contains("coding=")) {
-            if !protected.iter().any(|&idx| {
-                content.lines().nth(idx).map_or(false, |l| {
-                    let t = l.trim();
-                    t.starts_with('#') && (t.contains("coding:") || t.contains("coding="))
-                })
-            }) {
+            if !protected.contains(&i) {
                 protected.push(i);
             }
         }

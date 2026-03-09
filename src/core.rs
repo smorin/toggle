@@ -305,15 +305,27 @@ pub fn find_and_toggle_section(
             }
 
             if section_end > section_start {
-                let force_state = match force {
-                    Some(force_str) if force_str == "on" => Some(true),
-                    Some(force_str) if force_str == "off" => Some(false),
-                    _ => None,
-                };
+                let force_mode = force.as_deref();
 
-                toggle_lines(lines, section_start, section_end, force_state, comment_style)?;
+                // Build content string from section lines and toggle via
+                // toggle_comments_with_marker for consistent behavior (skip blanks,
+                // preserve indentation)
+                let section_content = lines[section_start..section_end].join("\n");
+                let range = LineRange::new(1, section_end - section_start);
+                let toggled = toggle_comments_with_marker(
+                    &section_content,
+                    &[range],
+                    force_mode,
+                    &comment_style.single_line,
+                );
+
+                // Splice toggled lines back in
+                let toggled_lines: Vec<String> = toggled.lines().map(String::from).collect();
+                for (offset, new_line) in toggled_lines.iter().enumerate() {
+                    lines[section_start + offset] = new_line.clone();
+                }
+
                 modified = true;
-
                 i = section_end;
             }
         }

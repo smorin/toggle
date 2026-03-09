@@ -78,14 +78,14 @@ fn process_path(path: &Path, cli: &Cli) -> Result<()> {
         if cli.verbose {
             eprintln!("  Line range: {}", line_range);
         }
-        toggle_line_range(path, line_range, &cli.force, &cli.mode)?;
+        toggle_line_range(path, line_range, &cli.force, &cli.mode, cli.temp_suffix.as_deref())?;
     }
 
     for section in &cli.sections {
         if cli.verbose {
             eprintln!("  Section: {}", section);
         }
-        toggle_section(path, section, &cli.force, &cli.mode, cli.verbose)?;
+        toggle_section(path, section, &cli.force, &cli.mode, cli.verbose, cli.temp_suffix.as_deref())?;
     }
 
     Ok(())
@@ -96,6 +96,7 @@ fn toggle_line_range(
     line_range: &str,
     force: &Option<String>,
     mode: &str,
+    temp_suffix: Option<&str>,
 ) -> Result<()> {
     let comment_style = core::get_comment_style(path, mode)?;
     let (start_line, end_line) = core::parse_line_range(line_range)?;
@@ -110,7 +111,7 @@ fn toggle_line_range(
         &comment_style.single_line,
     );
 
-    io::write_file(path, &result, None)?;
+    io::write_file(path, &result, temp_suffix)?;
 
     Ok(())
 }
@@ -121,6 +122,7 @@ fn toggle_section(
     force: &Option<String>,
     mode: &str,
     verbose: bool,
+    temp_suffix: Option<&str>,
 ) -> Result<()> {
     let comment_style = core::get_comment_style(path, mode)?;
 
@@ -145,7 +147,7 @@ fn toggle_section(
             eprintln!("  File modified, writing changes back");
         }
         let content = lines.join("\n") + "\n";
-        io::write_file(path, &content, None)?;
+        io::write_file(path, &content, temp_suffix)?;
     } else if verbose {
         eprintln!("  No changes made to file");
     }
