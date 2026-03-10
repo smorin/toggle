@@ -306,7 +306,7 @@ fn run_json(cli: &Cli, opts: &ToggleOptions) -> Result<()> {
         }
         // In recursive mode, silently skip files with unsupported extensions
         if cli.recursive
-            && cli.lines.is_empty()
+            && opts.comment_style_override.is_empty()
             && core::get_comment_style(path, opts.mode, opts.config).is_err()
         {
             continue;
