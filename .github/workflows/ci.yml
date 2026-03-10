@@ -120,7 +120,7 @@ jobs:
         with:
           # Compare against this repo's main branch, not the unrelated
           # "toggle" crate on crates.io which has a different API surface.
-          baseline-rev: main
+          baseline-rev: origin/main
 
   actionlint:
     name: Lint GitHub Actions
