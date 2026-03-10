@@ -111,8 +111,18 @@ fn run(cli: &Cli) -> Result<()> {
         cli.mode.clone()
     };
 
-    let effective_force = if cli.force.is_some() {
-        cli.force.clone()
+    let effective_force = if let Some(ref val) = cli.force {
+        match val.as_str() {
+            "on" | "off" => cli.force.clone(),
+            "invert" => None,
+            other => {
+                return Err(UsageError(format!(
+                    "Invalid --force value '{}': expected on, off, or invert",
+                    other
+                ))
+                .into());
+            }
+        }
     } else {
         config
             .as_ref()

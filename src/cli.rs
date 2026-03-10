@@ -18,8 +18,8 @@ pub struct Cli {
     #[arg(short = 'S', long = "section", action = clap::ArgAction::Append)]
     pub sections: Vec<String>,
 
-    /// Force toggle state (on/off)
-    #[arg(short = 'f', long = "force")]
+    /// Force toggle state (on/off/invert)
+    #[arg(short = 'f', long = "force", visible_short_alias = 'F')]
     pub force: Option<String>,
 
     /// Comment mode (auto/single/multi)
