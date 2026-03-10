@@ -1,7 +1,8 @@
 use anyhow::{Context, Result};
 use clap::Parser;
+use std::collections::BTreeMap;
 use std::io::IsTerminal;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
 use toggle::cli::Cli;
@@ -33,6 +34,8 @@ struct ToggleOptions<'a> {
 struct ProcessResult {
     action: String,
     lines_changed: usize,
+    section_id: Option<String>,
+    desc: Option<String>,
 }
 
 /// JSON output entry for --json mode.
@@ -45,6 +48,27 @@ struct ToggleResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     error: Option<String>,
     dry_run: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    section_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    desc: Option<String>,
+}
+
+/// JSON output for --list-sections mode.
+#[derive(serde::Serialize)]
+struct SectionListEntry {
+    id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    desc: Option<String>,
+    files: Vec<SectionFileEntry>,
+}
+
+/// A single file location in --list-sections JSON output.
+#[derive(serde::Serialize)]
+struct SectionFileEntry {
+    file: String,
+    start_line: usize,
+    end_line: usize,
 }
 
 fn main() {
@@ -150,6 +174,14 @@ fn run(cli: &Cli) -> Result<()> {
         return Err(UsageError("--to-end requires at least one --line range".into()).into());
     }
 
+    // Validate --list-sections conflicts
+    if cli.list_sections && !cli.lines.is_empty() {
+        return Err(UsageError("--list-sections cannot be combined with --line".into()).into());
+    }
+    if cli.list_sections && cli.force.is_some() {
+        return Err(UsageError("--list-sections cannot be combined with --force".into()).into());
+    }
+
     // Validate --eol value
     match cli.eol.as_str() {
         "preserve" | "lf" | "crlf" => {}
@@ -180,15 +212,79 @@ fn run(cli: &Cli) -> Result<()> {
         recursive: cli.recursive,
     };
 
-    if cli.json {
+    if cli.list_sections {
+        run_list_sections(cli, &opts)
+    } else if cli.json {
         run_json(cli, &opts)
     } else {
         run_normal(cli, &opts)
     }
 }
 
+/// Expand CLI paths into individual files, walking directories when recursive is set.
+fn collect_files(paths: &[PathBuf], recursive: bool) -> Vec<PathBuf> {
+    if !recursive {
+        return paths.to_vec();
+    }
+    let mut files = Vec::new();
+    for path in paths {
+        if path.is_file() {
+            files.push(path.clone());
+        } else if path.is_dir() {
+            for entry in WalkDir::new(path)
+                .follow_links(false)
+                .into_iter()
+                .filter_entry(|e| {
+                    // Always include the root directory (depth 0), only filter
+                    // hidden entries in subdirectories
+                    e.depth() == 0 || !e.file_name().to_str().is_some_and(|s| s.starts_with('.'))
+                })
+                .filter_map(|e| e.ok())
+            {
+                if entry.file_type().is_file() {
+                    files.push(entry.into_path());
+                }
+            }
+        } else {
+            // Non-existent or special paths: include as-is to let process_path report errors
+            files.push(path.clone());
+        }
+    }
+    files
+}
+
+/// Check if a file has any sections matching the requested IDs.
+/// Returns true if at least one section matches, or if no section filter is active.
+fn file_has_matching_sections(path: &Path, section_ids: &[String], encoding: &str) -> bool {
+    if section_ids.is_empty() {
+        return true;
+    }
+    let content = match io::read_file_encoded(path, encoding) {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+    let found = core::discover_sections(&content);
+    found.iter().any(|s| section_ids.contains(&s.id))
+}
+
 fn run_normal(cli: &Cli, opts: &ToggleOptions) -> Result<()> {
-    for path in &cli.paths {
+    let files = collect_files(&cli.paths, cli.recursive);
+
+    for path in &files {
+        // In recursive mode with sections, skip files that don't contain matching sections
+        if cli.recursive
+            && !cli.sections.is_empty()
+            && !file_has_matching_sections(path, &cli.sections, opts.encoding)
+        {
+            continue;
+        }
+        // In recursive mode, silently skip files with unsupported extensions
+        if cli.recursive
+            && opts.comment_style_override.is_empty()
+            && core::get_comment_style(path, opts.mode, opts.config).is_err()
+        {
+            continue;
+        }
         process_path(path, cli, opts)
             .with_context(|| format!("Failed to process {}", path.display()))?;
     }
@@ -198,8 +294,24 @@ fn run_normal(cli: &Cli, opts: &ToggleOptions) -> Result<()> {
 fn run_json(cli: &Cli, opts: &ToggleOptions) -> Result<()> {
     let mut results: Vec<ToggleResult> = Vec::new();
     let mut had_error = false;
+    let files = collect_files(&cli.paths, cli.recursive);
 
-    for path in &cli.paths {
+    for path in &files {
+        // In recursive mode with sections, skip files that don't contain matching sections
+        if cli.recursive
+            && !cli.sections.is_empty()
+            && !file_has_matching_sections(path, &cli.sections, opts.encoding)
+        {
+            continue;
+        }
+        // In recursive mode, silently skip files with unsupported extensions
+        if cli.recursive
+            && opts.comment_style_override.is_empty()
+            && core::get_comment_style(path, opts.mode, opts.config).is_err()
+        {
+            continue;
+        }
+
         match process_path(path, cli, opts) {
             Ok(proc_results) => {
                 for pr in proc_results {
@@ -210,6 +322,8 @@ fn run_json(cli: &Cli, opts: &ToggleOptions) -> Result<()> {
                         success: true,
                         error: None,
                         dry_run: opts.dry_run,
+                        section_id: pr.section_id,
+                        desc: pr.desc,
                     });
                 }
             }
@@ -222,6 +336,8 @@ fn run_json(cli: &Cli, opts: &ToggleOptions) -> Result<()> {
                     success: false,
                     error: Some(format!("{:#}", e)),
                     dry_run: opts.dry_run,
+                    section_id: None,
+                    desc: None,
                 });
             }
         }
@@ -236,6 +352,72 @@ fn run_json(cli: &Cli, opts: &ToggleOptions) -> Result<()> {
         // Return a generic error so main() sets a non-zero exit code
         anyhow::bail!("One or more files failed to process");
     }
+    Ok(())
+}
+
+type SectionAggregation = (Option<String>, Vec<(String, usize, usize)>);
+
+fn run_list_sections(cli: &Cli, opts: &ToggleOptions) -> Result<()> {
+    let files = collect_files(&cli.paths, cli.recursive);
+
+    // Aggregate sections grouped by ID, preserving insertion order with BTreeMap
+    let mut sections_by_id: BTreeMap<String, SectionAggregation> = BTreeMap::new();
+
+    for path in &files {
+        let content = match io::read_file_encoded(path, opts.encoding) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+        let found = core::discover_sections(&content);
+        for section in found {
+            let entry = sections_by_id
+                .entry(section.id.clone())
+                .or_insert_with(|| (section.desc.clone(), Vec::new()));
+            // If we haven't captured a desc yet, use this one
+            if entry.0.is_none() && section.desc.is_some() {
+                entry.0 = section.desc.clone();
+            }
+            entry.1.push((
+                path.display().to_string(),
+                section.start_line,
+                section.end_line,
+            ));
+        }
+    }
+
+    if cli.json {
+        let entries: Vec<SectionListEntry> = sections_by_id
+            .into_iter()
+            .map(|(id, (desc, files))| SectionListEntry {
+                id,
+                desc,
+                files: files
+                    .into_iter()
+                    .map(|(file, start, end)| SectionFileEntry {
+                        file,
+                        start_line: start,
+                        end_line: end,
+                    })
+                    .collect(),
+            })
+            .collect();
+        println!(
+            "{}",
+            serde_json::to_string(&entries).expect("Failed to serialize JSON")
+        );
+    } else {
+        for (id, (desc, locations)) in &sections_by_id {
+            if let Some(d) = desc {
+                println!("{} desc=\"{}\"", id, d);
+            } else {
+                println!("{}", id);
+            }
+            for (file, start, end) in locations {
+                println!("  {}:{}-{}", file, start, end);
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -476,6 +658,8 @@ fn toggle_line_ranges(
     Ok(ProcessResult {
         action: "toggle_line_range".to_string(),
         lines_changed,
+        section_id: None,
+        desc: None,
     })
 }
 
@@ -497,12 +681,17 @@ fn toggle_section(path: &Path, section_id: &str, opts: &ToggleOptions) -> Result
         eprintln!("  File has {} lines", lines.len());
     }
 
-    let modified =
-        core::find_and_toggle_section(&mut lines, section_id, opts.force, &comment_style)?;
+    let result = core::find_and_toggle_section(&mut lines, section_id, opts.force, &comment_style)?;
+
+    if opts.verbose {
+        if let Some(ref d) = result.desc {
+            eprintln!("  Section desc: {}", d);
+        }
+    }
 
     let mut lines_changed = 0;
 
-    if modified {
+    if result.modified {
         if opts.verbose {
             eprintln!("  File modified, writing changes back");
         }
@@ -519,5 +708,7 @@ fn toggle_section(path: &Path, section_id: &str, opts: &ToggleOptions) -> Result
     Ok(ProcessResult {
         action: "toggle_section".to_string(),
         lines_changed,
+        section_id: Some(section_id.to_string()),
+        desc: result.desc,
     })
 }
