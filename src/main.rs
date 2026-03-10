@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use clap::Parser;
+use std::io::IsTerminal;
 use std::path::Path;
 
 use toggle::cli::Cli;
@@ -21,6 +22,9 @@ struct ToggleOptions<'a> {
     no_dereference: bool,
     encoding: &'a str,
     json: bool,
+    to_end: bool,
+    comment_style_override: &'a [String],
+    interactive: bool,
 }
 
 /// Result of processing a single toggle operation.
@@ -121,6 +125,19 @@ fn run(cli: &Cli) -> Result<()> {
         return Err(UsageError(format!("Unsupported encoding: '{}'", cli.encoding)).into());
     }
 
+    // Validate --comment-style: must be 1 or 3 values
+    if cli.comment_style.len() == 2 {
+        return Err(UsageError(
+            "--comment-style requires 1 value (single-line) or 3 values (single-line, multi-start, multi-end)".into(),
+        )
+        .into());
+    }
+
+    // Validate --to-end requires --line
+    if cli.to_end && cli.lines.is_empty() {
+        return Err(UsageError("--to-end requires at least one --line range".into()).into());
+    }
+
     // Validate --eol value
     match cli.eol.as_str() {
         "preserve" | "lf" | "crlf" => {}
@@ -145,6 +162,9 @@ fn run(cli: &Cli) -> Result<()> {
         no_dereference: cli.no_dereference,
         encoding: &cli.encoding,
         json: cli.json,
+        to_end: cli.to_end,
+        comment_style_override: &cli.comment_style,
+        interactive: cli.interactive,
     };
 
     if cli.json {
@@ -225,11 +245,13 @@ fn process_path(path: &Path, cli: &Cli, opts: &ToggleOptions) -> Result<Vec<Proc
 
     let mut results = Vec::new();
 
-    if let Some(line_range) = &cli.line {
+    if !cli.lines.is_empty() {
         if opts.verbose {
-            eprintln!("  Line range: {}", line_range);
+            for lr in &cli.lines {
+                eprintln!("  Line range: {}", lr);
+            }
         }
-        let pr = toggle_line_range(path, line_range, opts)?;
+        let pr = toggle_line_ranges(path, &cli.lines, opts)?;
         results.push(pr);
     }
 
@@ -260,55 +282,145 @@ fn count_changed_lines(original: &str, modified: &str) -> usize {
     changed
 }
 
-fn toggle_line_range(path: &Path, line_range: &str, opts: &ToggleOptions) -> Result<ProcessResult> {
-    let comment_style = core::get_comment_style(path, opts.mode, opts.config)?;
-    let (start_line, end_line) = core::parse_line_range(line_range)?;
-    let content = io::read_file_encoded(path, opts.encoding)?;
-
-    let line_count = content.lines().count();
-    if start_line > line_count {
-        return Err(UsageError(format!(
-            "Start line {} is out of range (file has {} lines)",
-            start_line, line_count
-        ))
-        .into());
-    }
-    if end_line > line_count {
-        return Err(UsageError(format!(
-            "End line {} is out of range (file has {} lines)",
-            end_line,
-            line_count
-        ))
-        .into());
-    }
-
-    let range = core::LineRange::new(start_line, end_line);
-    let force_mode = opts.force.as_deref();
-    let toggled = core::toggle_comments_with_marker(
-        &content,
-        &[range],
-        force_mode,
-        &comment_style.single_line,
-    );
-    let result = io::normalize_eol(&toggled, opts.eol);
-    let lines_changed = count_changed_lines(&content, &result);
+/// Apply changes to a file: handles dry-run, interactive prompt, backup, and write.
+/// Returns the number of lines changed.
+fn apply_changes(
+    path: &Path,
+    original: &str,
+    modified: &str,
+    opts: &ToggleOptions,
+) -> Result<usize> {
+    let lines_changed = count_changed_lines(original, modified);
 
     if opts.dry_run {
         if !opts.json {
-            io::print_diff(path, &content, &result);
+            io::print_diff(path, original, modified);
         }
-    } else {
-        if let Some(ext) = opts.backup {
-            io::create_backup(path, ext)?;
+        if opts.interactive && std::io::stdin().is_terminal() {
+            // In dry-run + interactive, just show the diff (already done above)
+            eprintln!("(dry-run mode, no changes will be written)");
         }
-        io::write_file_encoded(
-            path,
-            &result,
-            opts.temp_suffix,
-            opts.no_dereference,
-            opts.encoding,
-        )?;
+        return Ok(lines_changed);
     }
+
+    // Interactive prompt
+    if opts.interactive {
+        // Show diff preview before prompting (only on TTY to avoid polluting piped output)
+        if std::io::stdin().is_terminal() && !opts.json {
+            io::print_diff(path, original, modified);
+        }
+        eprint!("Modify {}? [y/N] ", path.display());
+        use std::io::Write;
+        std::io::stderr().flush().ok();
+        let mut answer = String::new();
+        std::io::stdin()
+            .read_line(&mut answer)
+            .map_err(|e| anyhow::anyhow!("Failed to read interactive input: {}", e))?;
+        if !answer.trim().eq_ignore_ascii_case("y") {
+            if opts.verbose {
+                eprintln!("  Skipped {}", path.display());
+            }
+            return Ok(0);
+        }
+    }
+
+    if let Some(ext) = opts.backup {
+        io::create_backup(path, ext)?;
+    }
+    io::write_file_encoded(
+        path,
+        modified,
+        opts.temp_suffix,
+        opts.no_dereference,
+        opts.encoding,
+    )?;
+    Ok(lines_changed)
+}
+
+/// Resolve comment style for a file, applying --comment-style override if present.
+fn resolve_comment_style(path: &Path, opts: &ToggleOptions) -> Result<core::CommentStyle> {
+    if !opts.comment_style_override.is_empty() {
+        let single = opts.comment_style_override[0].clone();
+        let (ms, me) = if opts.comment_style_override.len() == 3 {
+            (
+                Some(opts.comment_style_override[1].clone()),
+                Some(opts.comment_style_override[2].clone()),
+            )
+        } else {
+            (None, None)
+        };
+        return Ok(core::CommentStyle {
+            single_line: single,
+            multi_line_start: ms,
+            multi_line_end: me,
+        });
+    }
+    core::get_comment_style(path, opts.mode, opts.config)
+}
+
+fn toggle_line_ranges(
+    path: &Path,
+    line_range_specs: &[String],
+    opts: &ToggleOptions,
+) -> Result<ProcessResult> {
+    let comment_style = resolve_comment_style(path, opts)?;
+    let content = io::read_file_encoded(path, opts.encoding)?;
+    let line_count = content.lines().count();
+
+    // Parse all range specs into LineRange values
+    let mut ranges = Vec::new();
+    for spec in line_range_specs {
+        let (start_line, end_line) = core::parse_line_range(spec)?;
+        if start_line > line_count {
+            return Err(UsageError(format!(
+                "Start line {} is out of range (file has {} lines)",
+                start_line, line_count
+            ))
+            .into());
+        }
+        ranges.push(core::LineRange::new(start_line, end_line));
+    }
+
+    // --to-end: extend the last range's end to the file's line count
+    if opts.to_end {
+        if let Some(last) = ranges.last_mut() {
+            last.end = line_count;
+        }
+    }
+
+    // Validate end lines against file length (after --to-end extension)
+    for range in &ranges {
+        if range.end > line_count {
+            return Err(UsageError(format!(
+                "End line {} is out of range (file has {} lines)",
+                range.end, line_count
+            ))
+            .into());
+        }
+    }
+
+    let merged = core::merge_ranges(&ranges);
+    let force_mode = opts.force.as_deref();
+    let toggled = if opts.mode == "multi" {
+        let (ms, me) = match (
+            &comment_style.multi_line_start,
+            &comment_style.multi_line_end,
+        ) {
+            (Some(s), Some(e)) => (s.as_str(), e.as_str()),
+            _ => {
+                return Err(UsageError(format!(
+                    "Multi-line comments not supported for {}",
+                    path.display()
+                ))
+                .into());
+            }
+        };
+        core::toggle_comments_multi(&content, &merged, force_mode, ms, me)
+    } else {
+        core::toggle_comments_with_marker(&content, &merged, force_mode, &comment_style.single_line)
+    };
+    let result = io::normalize_eol(&toggled, opts.eol);
+    let lines_changed = apply_changes(path, &content, &result, opts)?;
 
     Ok(ProcessResult {
         action: "toggle_line_range".to_string(),
@@ -317,7 +429,7 @@ fn toggle_line_range(path: &Path, line_range: &str, opts: &ToggleOptions) -> Res
 }
 
 fn toggle_section(path: &Path, section_id: &str, opts: &ToggleOptions) -> Result<ProcessResult> {
-    let comment_style = core::get_comment_style(path, opts.mode, opts.config)?;
+    let comment_style = resolve_comment_style(path, opts)?;
 
     if opts.verbose {
         eprintln!("  Looking for section with ID={}", section_id);
@@ -348,23 +460,7 @@ fn toggle_section(path: &Path, section_id: &str, opts: &ToggleOptions) -> Result
             joined.push('\n');
         }
         let content = io::normalize_eol(&joined, opts.eol);
-        lines_changed = count_changed_lines(&original_content, &content);
-        if opts.dry_run {
-            if !opts.json {
-                io::print_diff(path, &original_content, &content);
-            }
-        } else {
-            if let Some(ext) = opts.backup {
-                io::create_backup(path, ext)?;
-            }
-            io::write_file_encoded(
-                path,
-                &content,
-                opts.temp_suffix,
-                opts.no_dereference,
-                opts.encoding,
-            )?;
-        }
+        lines_changed = apply_changes(path, &original_content, &content, opts)?;
     } else if opts.verbose {
         eprintln!("  No changes made to file");
     }

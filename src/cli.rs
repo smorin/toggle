@@ -10,9 +10,9 @@ pub struct Cli {
     #[arg(required = true)]
     pub paths: Vec<PathBuf>,
 
-    /// Line range in format <start_line>:<end_line> or <start_line>:+<count>
-    #[arg(short = 'l', long = "line")]
-    pub line: Option<String>,
+    /// Line range in format <start_line>:<end_line> or <start_line>:+<count> (repeatable)
+    #[arg(short = 'l', long = "line", action = clap::ArgAction::Append)]
+    pub lines: Vec<String>,
 
     /// Section ID to toggle
     #[arg(short = 'S', long = "section", action = clap::ArgAction::Append)]
@@ -58,6 +58,14 @@ pub struct Cli {
     #[arg(short = 'x', long = "posix-exit")]
     pub posix_exit: bool,
 
+    /// Override comment style: SINGLE [MULTI_START MULTI_END]
+    #[arg(long = "comment-style", num_args = 1..=3, value_names = ["SINGLE", "MULTI_START", "MULTI_END"])]
+    pub comment_style: Vec<String>,
+
+    /// Prompt before modifying each file
+    #[arg(short = 'i', long = "interactive")]
+    pub interactive: bool,
+
     /// Show diff of changes without writing files
     #[arg(long = "dry-run")]
     pub dry_run: bool,
@@ -65,6 +73,10 @@ pub struct Cli {
     /// Create backup with given extension before modifying (e.g. --backup .bak)
     #[arg(long = "backup")]
     pub backup: Option<String>,
+
+    /// Extend the last --line range to the end of file
+    #[arg(long = "to-end")]
+    pub to_end: bool,
 
     /// Path to .toggleConfig TOML file
     #[arg(long = "config")]

@@ -15,6 +15,177 @@ fn setup_temp_file(content: &str, filename: &str) -> (TempDir, std::path::PathBu
     (dir, path)
 }
 
+// ── Repeatable --line ranges (Phase 2) ──
+
+#[test]
+fn test_multiple_line_ranges_non_adjacent() {
+    let (_dir, path) = setup_temp_file("a\nb\nc\nd\ne\nf\n", "test.py");
+    cmd()
+        .args([path.to_str().unwrap(), "-l", "2:3", "-l", "5:6"])
+        .assert()
+        .success();
+    let result = fs::read_to_string(&path).unwrap();
+    assert_eq!(result, "a\n# b\n# c\nd\n# e\n# f\n");
+}
+
+#[test]
+fn test_multiple_line_ranges_overlapping() {
+    let (_dir, path) = setup_temp_file("a\nb\nc\nd\ne\n", "test.py");
+    cmd()
+        .args([path.to_str().unwrap(), "-l", "1:3", "-l", "2:4"])
+        .assert()
+        .success();
+    let result = fs::read_to_string(&path).unwrap();
+    // Lines 1-4 should all be commented (merged ranges)
+    assert_eq!(result, "# a\n# b\n# c\n# d\ne\n");
+}
+
+// ── --to-end (Phase 2) ──
+
+#[test]
+fn test_to_end_extends_to_eof() {
+    let (_dir, path) = setup_temp_file("a\nb\nc\nd\ne\n", "test.py");
+    cmd()
+        .args([path.to_str().unwrap(), "-l", "3", "--to-end"])
+        .assert()
+        .success();
+    let result = fs::read_to_string(&path).unwrap();
+    assert_eq!(result, "a\nb\n# c\n# d\n# e\n");
+}
+
+#[test]
+fn test_to_end_without_line_errors() {
+    let (_dir, path) = setup_temp_file("a\nb\n", "test.py");
+    cmd()
+        .args([path.to_str().unwrap(), "--to-end"])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains("--to-end requires"));
+}
+
+// ── Multi-line comment support (Phase 2) ──
+
+#[test]
+fn test_multi_line_mode_wraps_in_block_comment() {
+    let (_dir, path) = setup_temp_file("line1\nline2\nline3\nline4\n", "test.js");
+    cmd()
+        .args([path.to_str().unwrap(), "-l", "2:3", "-m", "multi"])
+        .assert()
+        .success();
+    let result = fs::read_to_string(&path).unwrap();
+    assert!(result.contains("/*"), "should contain block comment start");
+    assert!(result.contains("*/"), "should contain block comment end");
+}
+
+#[test]
+fn test_multi_line_mode_unwraps_block_comment() {
+    let (_dir, path) = setup_temp_file("line1\n/* line2\nline3 */\nline4\n", "test.js");
+    cmd()
+        .args([path.to_str().unwrap(), "-l", "2:3", "-m", "multi"])
+        .assert()
+        .success();
+    let result = fs::read_to_string(&path).unwrap();
+    assert!(!result.contains("/*"), "should unwrap block comment start");
+    assert!(!result.contains("*/"), "should unwrap block comment end");
+}
+
+#[test]
+fn test_multi_line_mode_unsupported_for_python() {
+    let (_dir, path) = setup_temp_file("hello\n", "test.py");
+    cmd()
+        .args([path.to_str().unwrap(), "-l", "1:1", "-m", "multi"])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains(
+            "Multi-line comments not supported",
+        ));
+}
+
+// ── --comment-style override (Phase 2) ──
+
+#[test]
+fn test_comment_style_single_override() {
+    let (_dir, path) = setup_temp_file("hello\nworld\n", "test.txt");
+    cmd()
+        .args([path.to_str().unwrap(), "-l", "1:2", "--comment-style", "//"])
+        .assert()
+        .success();
+    let result = fs::read_to_string(&path).unwrap();
+    assert!(
+        result.contains("// hello"),
+        "should use custom // delimiter"
+    );
+}
+
+#[test]
+fn test_comment_style_with_multi_line() {
+    let (_dir, path) = setup_temp_file("a\nb\nc\n", "test.txt");
+    cmd()
+        .args([
+            path.to_str().unwrap(),
+            "-l",
+            "1:2",
+            "-m",
+            "multi",
+            "--comment-style",
+            "//",
+            "/*",
+            "*/",
+        ])
+        .assert()
+        .success();
+    let result = fs::read_to_string(&path).unwrap();
+    assert!(result.contains("/*"), "should use custom multi-line start");
+    assert!(result.contains("*/"), "should use custom multi-line end");
+}
+
+#[test]
+fn test_comment_style_two_values_errors() {
+    let (_dir, path) = setup_temp_file("hello\n", "test.py");
+    cmd()
+        .args([
+            path.to_str().unwrap(),
+            "-l",
+            "1:1",
+            "--comment-style",
+            "//",
+            "/*",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains("--comment-style requires"));
+}
+
+// ── --interactive (Phase 2) ──
+
+#[test]
+fn test_interactive_yes_modifies_file() {
+    let (_dir, path) = setup_temp_file("hello\nworld\n", "test.py");
+    cmd()
+        .args([path.to_str().unwrap(), "-l", "1:2", "--interactive"])
+        .write_stdin("y\n")
+        .assert()
+        .success();
+    let result = fs::read_to_string(&path).unwrap();
+    assert!(result.contains("#"), "file should be modified on 'y'");
+}
+
+#[test]
+fn test_interactive_no_skips_modification() {
+    let (_dir, path) = setup_temp_file("hello\nworld\n", "test.py");
+    let original = fs::read_to_string(&path).unwrap();
+    cmd()
+        .args([path.to_str().unwrap(), "-l", "1:2", "--interactive"])
+        .write_stdin("n\n")
+        .assert()
+        .success();
+    let after = fs::read_to_string(&path).unwrap();
+    assert_eq!(
+        original, after,
+        "file should not be modified when user answers 'n'"
+    );
+}
+
 // ── Line range toggling ──
 
 #[test]
