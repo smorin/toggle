@@ -1354,7 +1354,10 @@ print('feature')
     assert!(stdout.contains("debug"), "should list debug section");
     assert!(stdout.contains("feature"), "should list feature section");
     assert!(stdout.contains("commented"), "should show commented state");
-    assert!(stdout.contains("uncommented"), "should show uncommented state");
+    assert!(
+        stdout.contains("uncommented"),
+        "should show uncommented state"
+    );
 }
 
 #[test]
@@ -1453,11 +1456,7 @@ fn test_scan_multiple_directories() {
     .unwrap();
 
     let output = cmd()
-        .args([
-            pkg_a.to_str().unwrap(),
-            pkg_b.to_str().unwrap(),
-            "--scan",
-        ])
+        .args([pkg_a.to_str().unwrap(), pkg_b.to_str().unwrap(), "--scan"])
         .output()
         .unwrap();
     assert!(output.status.success());

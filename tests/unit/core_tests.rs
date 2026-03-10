@@ -264,7 +264,8 @@ fn test_supported_extensions_nonempty() {
 
 #[test]
 fn test_scan_sections_finds_single_section() {
-    let content = "# toggle:start ID=debug desc=\"Debug output\"\n# print('debug')\n# toggle:end ID=debug\n";
+    let content =
+        "# toggle:start ID=debug desc=\"Debug output\"\n# print('debug')\n# toggle:end ID=debug\n";
     let path = Path::new("test.py");
     let sections = scan_sections(path, content);
     assert_eq!(sections.len(), 1);

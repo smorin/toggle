@@ -13,7 +13,7 @@ fn test_collect_files_single_file() {
     let file = dir.path().join("test.py");
     fs::write(&file, "print('hello')\n").unwrap();
 
-    let files = collect_files(&[file.clone()], false, &default_opts()).unwrap();
+    let files = collect_files(std::slice::from_ref(&file), false, &default_opts()).unwrap();
     assert_eq!(files, vec![file]);
 }
 
@@ -39,7 +39,11 @@ fn test_collect_files_directory_non_recursive_errors() {
     let result = collect_files(&[dir.path().to_path_buf()], false, &default_opts());
     assert!(result.is_err());
     let err = result.unwrap_err().to_string();
-    assert!(err.contains("directory"), "Error should mention directory: {}", err);
+    assert!(
+        err.contains("directory"),
+        "Error should mention directory: {}",
+        err
+    );
 }
 
 #[test]
@@ -92,12 +96,7 @@ fn test_collect_files_mixed_paths() {
     fs::write(&standalone, "").unwrap();
     fs::write(sub.join("util.py"), "").unwrap();
 
-    let files = collect_files(
-        &[standalone.clone(), sub.clone()],
-        true,
-        &default_opts(),
-    )
-    .unwrap();
+    let files = collect_files(&[standalone.clone(), sub.clone()], true, &default_opts()).unwrap();
     assert_eq!(files.len(), 2);
 }
 
@@ -105,7 +104,7 @@ fn test_collect_files_mixed_paths() {
 fn test_collect_files_nonexistent_passes_through() {
     let path = PathBuf::from("/tmp/definitely_does_not_exist_toggle_test.py");
     // Nonexistent file paths pass through for downstream error handling
-    let files = collect_files(&[path.clone()], false, &default_opts()).unwrap();
+    let files = collect_files(std::slice::from_ref(&path), false, &default_opts()).unwrap();
     assert_eq!(files, vec![path]);
 }
 

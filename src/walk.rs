@@ -97,21 +97,18 @@ fn walk_directory(dir: &Path, opts: &WalkOptions, files: &mut Vec<PathBuf>) -> R
         walker = walker.max_depth(depth);
     }
 
-    for entry in walker
-        .into_iter()
-        .filter_entry(|e| {
-            // Allow the root directory through
-            if e.depth() == 0 {
-                return true;
-            }
-            // Skip filtered directories
-            if e.file_type().is_dir() {
-                let name = e.file_name().to_str().unwrap_or("");
-                return !should_skip_dir(name, opts.skip_hidden);
-            }
-            true
-        })
-    {
+    for entry in walker.into_iter().filter_entry(|e| {
+        // Allow the root directory through
+        if e.depth() == 0 {
+            return true;
+        }
+        // Skip filtered directories
+        if e.file_type().is_dir() {
+            let name = e.file_name().to_str().unwrap_or("");
+            return !should_skip_dir(name, opts.skip_hidden);
+        }
+        true
+    }) {
         match entry {
             Ok(entry) => {
                 if entry.file_type().is_file() && is_supported_file(entry.path()) {

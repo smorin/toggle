@@ -10,9 +10,8 @@ use crate::exit_codes::UsageError;
 /// Returns the list of file extensions that toggle knows how to handle.
 pub fn supported_extensions() -> &'static [&'static str] {
     &[
-        "py", "sh", "rb", "yaml", "yml", "toml", "r", "ex", "exs", "pl", "pm", "js", "jsx",
-        "ts", "tsx", "rs", "java", "c", "cpp", "go", "swift", "kt", "scala", "php", "lua", "hs",
-        "sql",
+        "py", "sh", "rb", "yaml", "yml", "toml", "r", "ex", "exs", "pl", "pm", "js", "jsx", "ts",
+        "tsx", "rs", "java", "c", "cpp", "go", "swift", "kt", "scala", "php", "lua", "hs", "sql",
     ]
 }
 
@@ -209,7 +208,6 @@ fn detect_section_state(lines: &[&str], comment_marker: &str) -> String {
         "mixed".to_string()
     }
 }
-
 
 /// Line range representation
 #[derive(Debug, Clone)]

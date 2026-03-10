@@ -165,19 +165,13 @@ fn run(cli: &Cli) -> Result<()> {
     // Handle --scan mode early (read-only, no toggle options needed)
     if cli.scan {
         if !cli.lines.is_empty() {
-            return Err(
-                UsageError("--scan cannot be combined with --line".into()).into(),
-            );
+            return Err(UsageError("--scan cannot be combined with --line".into()).into());
         }
         if !cli.sections.is_empty() {
-            return Err(
-                UsageError("--scan cannot be combined with --section".into()).into(),
-            );
+            return Err(UsageError("--scan cannot be combined with --section".into()).into());
         }
         if cli.force.is_some() {
-            return Err(
-                UsageError("--scan cannot be combined with --force".into()).into(),
-            );
+            return Err(UsageError("--scan cannot be combined with --force".into()).into());
         }
         return run_scan(cli);
     }
@@ -789,9 +783,7 @@ fn print_scan_results(sections: &[core::ScanSectionInfo]) {
     println!("{}", "\u{2500}".repeat(100));
 
     for s in sections {
-        let end = s
-            .end_line
-            .map_or("???".to_string(), |e| e.to_string());
+        let end = s.end_line.map_or("???".to_string(), |e| e.to_string());
         let lines_str = format!("{}-{}", s.start_line, end);
         let desc = s.description.as_deref().unwrap_or("");
         println!(

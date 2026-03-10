@@ -4,7 +4,7 @@ pre-commit:
     fmt:
       run: cargo fmt --all -- --check
     clippy:
-      run: cargo clippy -- -D warnings
+      run: cargo clippy --all-targets -- -D warnings
     actionlint:
       glob: ".github/workflows/*.{yml,yaml}"
       run: actionlint {staged_files}
