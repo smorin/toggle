@@ -106,13 +106,7 @@ fn bench_toggle_multi(c: &mut Criterion) {
     c.bench_function("toggle_multi_1000", |b| {
         b.iter(|| {
             let ranges = vec![LineRange::new(1, 1000)];
-            toggle_comments_multi(
-                black_box(&content),
-                black_box(&ranges),
-                None,
-                "/*",
-                "*/",
-            )
+            toggle_comments_multi(black_box(&content), black_box(&ranges), None, "/*", "*/")
         })
     });
 }
@@ -130,13 +124,8 @@ fn bench_section_toggle(c: &mut Criterion) {
     c.bench_function("section_toggle_single", |b| {
         b.iter(|| {
             let mut lines: Vec<String> = content.lines().map(String::from).collect();
-            find_and_toggle_section(
-                black_box(&mut lines),
-                black_box("section10"),
-                &None,
-                &style,
-            )
-            .unwrap()
+            find_and_toggle_section(black_box(&mut lines), black_box("section10"), &None, &style)
+                .unwrap()
         })
     });
 

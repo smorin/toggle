@@ -176,14 +176,10 @@ fn run(cli: &Cli) -> Result<()> {
 
     // Validate --list-sections conflicts
     if cli.list_sections && !cli.lines.is_empty() {
-        return Err(
-            UsageError("--list-sections cannot be combined with --line".into()).into(),
-        );
+        return Err(UsageError("--list-sections cannot be combined with --line".into()).into());
     }
     if cli.list_sections && cli.force.is_some() {
-        return Err(
-            UsageError("--list-sections cannot be combined with --force".into()).into(),
-        );
+        return Err(UsageError("--list-sections cannot be combined with --force".into()).into());
     }
 
     // Validate --eol value
@@ -241,11 +237,7 @@ fn collect_files(paths: &[PathBuf], recursive: bool) -> Vec<PathBuf> {
                 .filter_entry(|e| {
                     // Always include the root directory (depth 0), only filter
                     // hidden entries in subdirectories
-                    e.depth() == 0
-                        || !e
-                            .file_name()
-                            .to_str()
-                            .map_or(false, |s| s.starts_with('.'))
+                    e.depth() == 0 || !e.file_name().to_str().is_some_and(|s| s.starts_with('.'))
                 })
                 .filter_map(|e| e.ok())
             {
@@ -263,11 +255,7 @@ fn collect_files(paths: &[PathBuf], recursive: bool) -> Vec<PathBuf> {
 
 /// Check if a file has any sections matching the requested IDs.
 /// Returns true if at least one section matches, or if no section filter is active.
-fn file_has_matching_sections(
-    path: &Path,
-    section_ids: &[String],
-    encoding: &str,
-) -> bool {
+fn file_has_matching_sections(path: &Path, section_ids: &[String], encoding: &str) -> bool {
     if section_ids.is_empty() {
         return true;
     }
@@ -284,11 +272,15 @@ fn run_normal(cli: &Cli, opts: &ToggleOptions) -> Result<()> {
 
     for path in &files {
         // In recursive mode with sections, skip files that don't contain matching sections
-        if cli.recursive && !cli.sections.is_empty() && !file_has_matching_sections(path, &cli.sections, opts.encoding) {
+        if cli.recursive
+            && !cli.sections.is_empty()
+            && !file_has_matching_sections(path, &cli.sections, opts.encoding)
+        {
             continue;
         }
         // In recursive mode, silently skip files with unsupported extensions
-        if cli.recursive && opts.comment_style_override.is_empty()
+        if cli.recursive
+            && opts.comment_style_override.is_empty()
             && core::get_comment_style(path, opts.mode, opts.config).is_err()
         {
             continue;
@@ -306,14 +298,18 @@ fn run_json(cli: &Cli, opts: &ToggleOptions) -> Result<()> {
 
     for path in &files {
         // In recursive mode with sections, skip files that don't contain matching sections
-        if cli.recursive && !cli.sections.is_empty() && !file_has_matching_sections(path, &cli.sections, opts.encoding) {
+        if cli.recursive
+            && !cli.sections.is_empty()
+            && !file_has_matching_sections(path, &cli.sections, opts.encoding)
+        {
             continue;
         }
         // In recursive mode, silently skip files with unsupported extensions
-        if cli.recursive && cli.lines.is_empty() {
-            if core::get_comment_style(path, opts.mode, opts.config).is_err() {
-                continue;
-            }
+        if cli.recursive
+            && cli.lines.is_empty()
+            && core::get_comment_style(path, opts.mode, opts.config).is_err()
+        {
+            continue;
         }
 
         match process_path(path, cli, opts) {
@@ -359,12 +355,13 @@ fn run_json(cli: &Cli, opts: &ToggleOptions) -> Result<()> {
     Ok(())
 }
 
+type SectionAggregation = (Option<String>, Vec<(String, usize, usize)>);
+
 fn run_list_sections(cli: &Cli, opts: &ToggleOptions) -> Result<()> {
     let files = collect_files(&cli.paths, cli.recursive);
 
     // Aggregate sections grouped by ID, preserving insertion order with BTreeMap
-    let mut sections_by_id: BTreeMap<String, (Option<String>, Vec<(String, usize, usize)>)> =
-        BTreeMap::new();
+    let mut sections_by_id: BTreeMap<String, SectionAggregation> = BTreeMap::new();
 
     for path in &files {
         let content = match io::read_file_encoded(path, opts.encoding) {
@@ -380,9 +377,11 @@ fn run_list_sections(cli: &Cli, opts: &ToggleOptions) -> Result<()> {
             if entry.0.is_none() && section.desc.is_some() {
                 entry.0 = section.desc.clone();
             }
-            entry
-                .1
-                .push((path.display().to_string(), section.start_line, section.end_line));
+            entry.1.push((
+                path.display().to_string(),
+                section.start_line,
+                section.end_line,
+            ));
         }
     }
 
@@ -682,8 +681,7 @@ fn toggle_section(path: &Path, section_id: &str, opts: &ToggleOptions) -> Result
         eprintln!("  File has {} lines", lines.len());
     }
 
-    let result =
-        core::find_and_toggle_section(&mut lines, section_id, opts.force, &comment_style)?;
+    let result = core::find_and_toggle_section(&mut lines, section_id, opts.force, &comment_style)?;
 
     if opts.verbose {
         if let Some(ref d) = result.desc {

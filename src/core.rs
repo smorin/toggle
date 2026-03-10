@@ -76,6 +76,7 @@ pub fn discover_sections(content: &str) -> Vec<SectionInfo> {
 
                 // Find matching end marker
                 let mut end_line = None;
+                #[allow(clippy::needless_range_loop)]
                 for j in (i + 1)..lines.len() {
                     if line_matches_end(lines[j], &id) {
                         end_line = Some(j + 1); // 1-based
