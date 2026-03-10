@@ -119,7 +119,7 @@ fn test_read_file_encoded_latin1() {
     let dir = tempfile::TempDir::new().unwrap();
     let path = dir.path().join("test.py");
     // "café" in Latin-1: 63 61 66 e9
-    std::fs::write(&path, &[0x63, 0x61, 0x66, 0xe9]).unwrap();
+    std::fs::write(&path, [0x63, 0x61, 0x66, 0xe9]).unwrap();
     let content = read_file_encoded(&path, "latin-1").unwrap();
     assert_eq!(content, "caf\u{e9}");
 }

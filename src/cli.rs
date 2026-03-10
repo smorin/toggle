@@ -18,8 +18,16 @@ pub struct Cli {
     #[arg(short = 'S', long = "section", action = clap::ArgAction::Append)]
     pub sections: Vec<String>,
 
-    /// Force toggle state (on/off)
-    #[arg(short = 'f', long = "force")]
+    /// Recursively walk directories
+    #[arg(short = 'R', long = "recursive")]
+    pub recursive: bool,
+
+    /// List all section IDs found in files (discovery mode, no toggling)
+    #[arg(long = "list-sections")]
+    pub list_sections: bool,
+
+    /// Force toggle state (on/off/invert)
+    #[arg(short = 'f', long = "force", visible_short_alias = 'F')]
     pub force: Option<String>,
 
     /// Comment mode (auto/single/multi)
@@ -77,10 +85,6 @@ pub struct Cli {
     /// Extend the last --line range to the end of file
     #[arg(long = "to-end")]
     pub to_end: bool,
-
-    /// Recursively process directories
-    #[arg(short = 'R', long = "recursive")]
-    pub recursive: bool,
 
     /// Scan for section IDs without modifying files
     #[arg(long = "scan")]

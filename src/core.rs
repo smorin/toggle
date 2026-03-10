@@ -16,9 +16,24 @@ pub fn supported_extensions() -> &'static [&'static str] {
     ]
 }
 
-/// Information about a discovered toggle section.
-#[derive(Debug, Clone, serde::Serialize)]
+/// A discovered section marker with metadata (used by discover_sections and find_and_toggle_section).
+#[derive(Debug, Clone)]
 pub struct SectionInfo {
+    pub id: String,
+    pub desc: Option<String>,
+    pub start_line: usize, // 1-based
+    pub end_line: usize,   // 1-based
+}
+
+/// Result of toggling a section, including parsed metadata.
+pub struct SectionToggleResult {
+    pub modified: bool,
+    pub desc: Option<String>,
+}
+
+/// Information about a discovered toggle section for scan output.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ScanSectionInfo {
     pub id: String,
     pub file: String,
     pub start_line: usize,
@@ -27,9 +42,89 @@ pub struct SectionInfo {
     pub state: String,
 }
 
+/// Extract the `desc="..."` value from a section marker line.
+fn parse_section_desc(line: &str) -> Option<String> {
+    let marker = "desc=\"";
+    let start = line.find(marker)? + marker.len();
+    let rest = &line[start..];
+    let end = rest.find('"')?;
+    Some(rest[..end].to_string())
+}
+
+/// Extract the section ID as a whitespace-delimited token after `ID=`.
+fn parse_section_id(line: &str) -> Option<String> {
+    let marker = "ID=";
+    let start = line.find(marker)? + marker.len();
+    let rest = &line[start..];
+    let end = rest.find(char::is_whitespace).unwrap_or(rest.len());
+    let id = &rest[..end];
+    if id.is_empty() {
+        None
+    } else {
+        Some(id.to_string())
+    }
+}
+
+/// Check if a line contains a `toggle:start` marker with an exact section ID match.
+fn line_matches_start(line: &str, section_id: &str) -> bool {
+    if !line.contains("toggle:start") {
+        return false;
+    }
+    parse_section_id(line).as_deref() == Some(section_id)
+}
+
+/// Check if a line contains a `toggle:end` marker with an exact section ID match.
+fn line_matches_end(line: &str, section_id: &str) -> bool {
+    if !line.contains("toggle:end") {
+        return false;
+    }
+    parse_section_id(line).as_deref() == Some(section_id)
+}
+
+/// Scan file content for all section marker pairs and return their metadata.
+/// Unclosed sections are silently skipped (useful for discovery across many files).
+pub fn discover_sections(content: &str) -> Vec<SectionInfo> {
+    let lines: Vec<&str> = content.lines().collect();
+    let mut sections = Vec::new();
+    let mut i = 0;
+
+    while i < lines.len() {
+        if lines[i].contains("toggle:start") {
+            if let Some(id) = parse_section_id(lines[i]) {
+                let desc = parse_section_desc(lines[i]);
+                let start_line = i + 1; // 1-based
+
+                // Find matching end marker
+                let mut end_line = None;
+                #[allow(clippy::needless_range_loop)]
+                for j in (i + 1)..lines.len() {
+                    if line_matches_end(lines[j], &id) {
+                        end_line = Some(j + 1); // 1-based
+                        break;
+                    }
+                }
+
+                if let Some(end_line) = end_line {
+                    sections.push(SectionInfo {
+                        id,
+                        desc,
+                        start_line,
+                        end_line,
+                    });
+                    i = end_line; // skip past this section (end_line is 1-based, i is 0-based)
+                    continue;
+                }
+            }
+        }
+        i += 1;
+    }
+
+    sections
+}
+
 /// Scan file content for toggle:start / toggle:end markers.
-/// Returns all sections found. Does not modify anything.
-pub fn scan_sections(path: &Path, content: &str) -> Vec<SectionInfo> {
+/// Returns all sections found with state info. Does not modify anything.
+pub fn scan_sections(path: &Path, content: &str) -> Vec<ScanSectionInfo> {
     let lines: Vec<&str> = content.lines().collect();
     let mut sections = Vec::new();
     let file_str = path.display().to_string();
@@ -41,24 +136,23 @@ pub fn scan_sections(path: &Path, content: &str) -> Vec<SectionInfo> {
 
     let mut i = 0;
     while i < lines.len() {
-        if let Some(pos) = lines[i].find("toggle:start ID=") {
-            let after_id = &lines[i][pos + "toggle:start ID=".len()..];
-            let id = after_id
-                .split_whitespace()
-                .next()
-                .unwrap_or("")
-                .to_string();
+        if let Some(_pos) = lines[i].find("toggle:start ID=") {
+            let id = parse_section_id(lines[i]).unwrap_or_default();
+            if id.is_empty() {
+                i += 1;
+                continue;
+            }
 
             // Extract optional description
-            let description = extract_description(lines[i]);
+            let description = parse_section_desc(lines[i]);
 
             let start_line = i + 1; // 1-based
 
             // Find matching end marker
-            let end_marker = format!("toggle:end ID={}", id);
             let mut end_line = None;
-            for (j, line) in lines.iter().enumerate().skip(i + 1) {
-                if line.contains(&end_marker) {
+            #[allow(clippy::needless_range_loop)]
+            for j in (i + 1)..lines.len() {
+                if line_matches_end(lines[j], &id) {
                     end_line = Some(j + 1); // 1-based
                     break;
                 }
@@ -73,7 +167,7 @@ pub fn scan_sections(path: &Path, content: &str) -> Vec<SectionInfo> {
                 "unknown".to_string()
             };
 
-            sections.push(SectionInfo {
+            sections.push(ScanSectionInfo {
                 id,
                 file: file_str.clone(),
                 start_line,
@@ -83,7 +177,7 @@ pub fn scan_sections(path: &Path, content: &str) -> Vec<SectionInfo> {
             });
 
             if let Some(end) = end_line {
-                i = end; // skip past end marker (end is 1-based, so 0-based index is end-1, next is end)
+                i = end;
             } else {
                 i += 1;
             }
@@ -93,18 +187,6 @@ pub fn scan_sections(path: &Path, content: &str) -> Vec<SectionInfo> {
     }
 
     sections
-}
-
-/// Extract desc="..." from a toggle:start line.
-fn extract_description(line: &str) -> Option<String> {
-    let desc_prefix = "desc=\"";
-    if let Some(pos) = line.find(desc_prefix) {
-        let after = &line[pos + desc_prefix.len()..];
-        if let Some(end) = after.find('"') {
-            return Some(after[..end].to_string());
-        }
-    }
-    None
 }
 
 /// Detect whether section content is commented, uncommented, or mixed.
@@ -127,6 +209,7 @@ fn detect_section_state(lines: &[&str], comment_marker: &str) -> String {
         "mixed".to_string()
     }
 }
+
 
 /// Line range representation
 #[derive(Debug, Clone)]
@@ -539,31 +622,38 @@ pub fn get_comment_style(
     comment_styles
         .get(extension)
         .cloned()
-        .ok_or_else(|| UsageError(format!("Unsupported file extension: .{}", extension)).into())
+        .ok_or_else(|| {
+            UsageError(format!(
+                "Unsupported file extension: .{}; use --comment-style or --config with a [global] single_line_delimiter",
+                extension
+            ))
+            .into()
+        })
 }
 
 /// Find section markers and toggle the content between them.
-/// Returns true if the file was modified.
+/// Returns a `SectionToggleResult` with modification status and parsed desc.
 pub fn find_and_toggle_section(
     lines: &mut [String],
     section_id: &str,
     force: &Option<String>,
     comment_style: &CommentStyle,
-) -> Result<bool> {
+) -> Result<SectionToggleResult> {
     let mut i = 0;
     let mut modified = false;
+    let mut desc = None;
 
     while i < lines.len() {
-        let start_marker = format!("toggle:start ID={}", section_id);
-
-        if lines[i].contains(&start_marker) {
+        if line_matches_start(&lines[i], section_id) {
+            if desc.is_none() {
+                desc = parse_section_desc(&lines[i]);
+            }
             let section_start = i + 1;
 
-            let end_marker = format!("toggle:end ID={}", section_id);
             let mut section_end = None;
 
             for (j, line) in lines.iter().enumerate().skip(i + 1) {
-                if line.contains(&end_marker) {
+                if line_matches_end(line, section_id) {
                     section_end = Some(j);
                     break;
                 }
@@ -625,5 +715,5 @@ pub fn find_and_toggle_section(
         i += 1;
     }
 
-    Ok(modified)
+    Ok(SectionToggleResult { modified, desc })
 }

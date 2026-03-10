@@ -242,7 +242,7 @@ fn test_section_toggle_preserves_trailing_empty_lines() {
         "# toggle:end ID=sec1".to_string(),
     ];
     let result = find_and_toggle_section(&mut lines, "sec1", &None, &style).unwrap();
-    assert!(result, "section should be modified");
+    assert!(result.modified, "section should be modified");
     // The empty line should remain empty (not be replaced by stale data)
     assert_eq!(lines[1], "# hello");
     assert_eq!(lines[2], "");
