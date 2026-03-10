@@ -774,3 +774,123 @@ fn test_json_with_dry_run() {
     let after = fs::read_to_string(&path).unwrap();
     assert_eq!(after, "hello\nworld\n");
 }
+
+// ── -F alias and --force invert value ───────────────────────────────────────
+
+#[test]
+fn test_force_uppercase_f_alias_on() {
+    let (_dir, path) = setup_temp_file("a\nb\nc\n", "test.py");
+    cmd()
+        .args([path.to_str().unwrap(), "-F", "on", "-l", "1:2"])
+        .assert()
+        .success();
+    let result = fs::read_to_string(&path).unwrap();
+    assert_eq!(result, "# a\n# b\nc\n");
+}
+
+#[test]
+fn test_force_uppercase_f_alias_off() {
+    let (_dir, path) = setup_temp_file("# a\n# b\nc\n", "test.py");
+    cmd()
+        .args([path.to_str().unwrap(), "-F", "off", "-l", "1:2"])
+        .assert()
+        .success();
+    let result = fs::read_to_string(&path).unwrap();
+    assert_eq!(result, "a\nb\nc\n");
+}
+
+#[test]
+fn test_force_invert_value_comments_then_uncomments() {
+    let (_dir, path) = setup_temp_file("a\nb\nc\n", "test.py");
+    // First pass: invert on uncommented lines → comments them
+    cmd()
+        .args([path.to_str().unwrap(), "-f", "invert", "-l", "1:2"])
+        .assert()
+        .success();
+    let result = fs::read_to_string(&path).unwrap();
+    assert_eq!(result, "# a\n# b\nc\n");
+    // Second pass: invert on commented lines → uncomments them
+    cmd()
+        .args([path.to_str().unwrap(), "--force", "invert", "-l", "1:2"])
+        .assert()
+        .success();
+    let result = fs::read_to_string(&path).unwrap();
+    assert_eq!(result, "a\nb\nc\n");
+}
+
+#[test]
+fn test_force_invert_with_uppercase_f() {
+    let (_dir, path) = setup_temp_file("a\nb\n", "test.py");
+    cmd()
+        .args([path.to_str().unwrap(), "-F", "invert", "-l", "1:2"])
+        .assert()
+        .success();
+    let result = fs::read_to_string(&path).unwrap();
+    assert_eq!(result, "# a\n# b\n");
+}
+
+#[test]
+fn test_force_invalid_value_errors() {
+    let (_dir, path) = setup_temp_file("a\nb\n", "test.py");
+    cmd()
+        .args([path.to_str().unwrap(), "--force", "bogus", "-l", "1:2"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Invalid --force value 'bogus'"));
+}
+
+// ── Unknown extension fallback to config ────────────────────────────────────
+
+#[test]
+fn test_unknown_extension_with_global_config_delimiter() {
+    let dir = TempDir::new().unwrap();
+    let file_path = dir.path().join("data.xyz");
+    fs::write(&file_path, "line one\nline two\n").unwrap();
+
+    let config_path = dir.path().join(".toggleConfig");
+    fs::write(
+        &config_path,
+        "[global]\nsingle_line_delimiter = \"//\"\n",
+    )
+    .unwrap();
+
+    cmd()
+        .args([
+            file_path.to_str().unwrap(),
+            "-l",
+            "1:2",
+            "--config",
+            config_path.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+    let result = fs::read_to_string(&file_path).unwrap();
+    assert_eq!(result, "// line one\n// line two\n");
+}
+
+#[test]
+fn test_unknown_extension_without_config_errors() {
+    let dir = TempDir::new().unwrap();
+    let file_path = dir.path().join("data.xyz");
+    fs::write(&file_path, "line one\nline two\n").unwrap();
+
+    cmd()
+        .args([file_path.to_str().unwrap(), "-l", "1:2"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Unsupported file extension: .xyz"));
+}
+
+#[test]
+fn test_unknown_extension_error_suggests_alternatives() {
+    let dir = TempDir::new().unwrap();
+    let file_path = dir.path().join("data.xyz");
+    fs::write(&file_path, "line one\n").unwrap();
+
+    cmd()
+        .args([file_path.to_str().unwrap(), "-l", "1:1"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--comment-style"))
+        .stderr(predicate::str::contains("--config"));
+}
