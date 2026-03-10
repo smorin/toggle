@@ -774,3 +774,140 @@ fn test_json_with_dry_run() {
     let after = fs::read_to_string(&path).unwrap();
     assert_eq!(after, "hello\nworld\n");
 }
+
+// ── -R/--recursive directory traversal ──
+
+fn setup_temp_dir_with_files(files: &[(&str, &str)]) -> TempDir {
+    let dir = TempDir::new().unwrap();
+    for (name, content) in files {
+        let path = dir.path().join(name);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).unwrap();
+        }
+        fs::write(&path, content).unwrap();
+    }
+    dir
+}
+
+#[test]
+fn test_recursive_toggles_all_files_in_directory() {
+    let dir = setup_temp_dir_with_files(&[
+        ("a.py", "hello\nworld\n"),
+        ("b.py", "foo\nbar\n"),
+    ]);
+    cmd()
+        .args([dir.path().to_str().unwrap(), "-l", "1:2", "-R"])
+        .assert()
+        .success();
+    let a = fs::read_to_string(dir.path().join("a.py")).unwrap();
+    let b = fs::read_to_string(dir.path().join("b.py")).unwrap();
+    assert!(a.contains("# hello"), "a.py should be commented");
+    assert!(b.contains("# foo"), "b.py should be commented");
+}
+
+#[test]
+fn test_recursive_traverses_subdirectories() {
+    let dir = setup_temp_dir_with_files(&[
+        ("top.py", "top\n"),
+        ("sub/nested.py", "nested\n"),
+        ("sub/deep/deep.py", "deep\n"),
+    ]);
+    cmd()
+        .args([dir.path().to_str().unwrap(), "-l", "1:1", "-R"])
+        .assert()
+        .success();
+    assert!(fs::read_to_string(dir.path().join("top.py")).unwrap().contains("# top"));
+    assert!(fs::read_to_string(dir.path().join("sub/nested.py")).unwrap().contains("# nested"));
+    assert!(fs::read_to_string(dir.path().join("sub/deep/deep.py")).unwrap().contains("# deep"));
+}
+
+#[test]
+fn test_recursive_skips_unsupported_extensions() {
+    let dir = setup_temp_dir_with_files(&[
+        ("code.py", "hello\n"),
+        ("readme.md", "# Title\n"),
+        ("data.csv", "a,b,c\n"),
+    ]);
+    cmd()
+        .args([dir.path().to_str().unwrap(), "-l", "1:1", "-R"])
+        .assert()
+        .success();
+    // .py should be toggled
+    assert!(fs::read_to_string(dir.path().join("code.py")).unwrap().contains("# hello"));
+    // .md and .csv should be untouched
+    assert_eq!(fs::read_to_string(dir.path().join("readme.md")).unwrap(), "# Title\n");
+    assert_eq!(fs::read_to_string(dir.path().join("data.csv")).unwrap(), "a,b,c\n");
+}
+
+#[test]
+fn test_recursive_with_section_toggle() {
+    let dir = setup_temp_dir_with_files(&[
+        ("a.py", "before\n# toggle:start ID=feat\nhello\n# toggle:end ID=feat\nafter\n"),
+        ("b.py", "start\n# toggle:start ID=feat\nworld\n# toggle:end ID=feat\nend\n"),
+    ]);
+    cmd()
+        .args([dir.path().to_str().unwrap(), "-S", "feat", "-f", "on", "-R"])
+        .assert()
+        .success();
+    let a = fs::read_to_string(dir.path().join("a.py")).unwrap();
+    let b = fs::read_to_string(dir.path().join("b.py")).unwrap();
+    assert!(a.contains("# hello"), "a.py section should be commented");
+    assert!(b.contains("# world"), "b.py section should be commented");
+}
+
+#[test]
+fn test_recursive_with_multiple_languages() {
+    let dir = setup_temp_dir_with_files(&[
+        ("app.py", "print('hi')\n"),
+        ("app.js", "console.log('hi');\n"),
+        ("app.rs", "fn main() {}\n"),
+    ]);
+    cmd()
+        .args([dir.path().to_str().unwrap(), "-l", "1:1", "-R"])
+        .assert()
+        .success();
+    assert!(fs::read_to_string(dir.path().join("app.py")).unwrap().contains("# "));
+    assert!(fs::read_to_string(dir.path().join("app.js")).unwrap().contains("// "));
+    assert!(fs::read_to_string(dir.path().join("app.rs")).unwrap().contains("// "));
+}
+
+#[test]
+fn test_directory_without_recursive_flag_errors() {
+    let dir = setup_temp_dir_with_files(&[("test.py", "hello\n")]);
+    cmd()
+        .args([dir.path().to_str().unwrap(), "-l", "1:1"])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains("use -R/--recursive"));
+}
+
+#[test]
+fn test_recursive_with_dry_run() {
+    let dir = setup_temp_dir_with_files(&[
+        ("a.py", "hello\n"),
+        ("b.py", "world\n"),
+    ]);
+    cmd()
+        .args([dir.path().to_str().unwrap(), "-l", "1:1", "-R", "--dry-run"])
+        .assert()
+        .success();
+    // Files should not be modified
+    assert_eq!(fs::read_to_string(dir.path().join("a.py")).unwrap(), "hello\n");
+    assert_eq!(fs::read_to_string(dir.path().join("b.py")).unwrap(), "world\n");
+}
+
+#[test]
+fn test_recursive_with_json_output() {
+    let dir = setup_temp_dir_with_files(&[
+        ("a.py", "hello\n"),
+        ("sub/b.js", "world\n"),
+    ]);
+    let output = cmd()
+        .args([dir.path().to_str().unwrap(), "-l", "1:1", "-R", "--json"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let json: Vec<Value> = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(json.len() >= 2, "JSON should have entries for each processed file");
+    assert!(json.iter().all(|e| e["success"] == true));
+}

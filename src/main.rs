@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use std::io::IsTerminal;
 use std::path::Path;
+use walkdir::WalkDir;
 
 use toggle::cli::Cli;
 use toggle::config::ToggleConfig;
@@ -25,6 +26,7 @@ struct ToggleOptions<'a> {
     to_end: bool,
     comment_style_override: &'a [String],
     interactive: bool,
+    recursive: bool,
 }
 
 /// Result of processing a single toggle operation.
@@ -165,6 +167,7 @@ fn run(cli: &Cli) -> Result<()> {
         to_end: cli.to_end,
         comment_style_override: &cli.comment_style,
         interactive: cli.interactive,
+        recursive: cli.recursive,
     };
 
     if cli.json {
@@ -227,6 +230,44 @@ fn run_json(cli: &Cli, opts: &ToggleOptions) -> Result<()> {
 }
 
 fn process_path(path: &Path, cli: &Cli, opts: &ToggleOptions) -> Result<Vec<ProcessResult>> {
+    // If path is a directory, handle recursive traversal
+    if path.is_dir() {
+        if !opts.recursive {
+            return Err(UsageError(format!(
+                "'{}' is a directory; use -R/--recursive to process directories",
+                path.display()
+            ))
+            .into());
+        }
+        let mut results = Vec::new();
+        for entry in WalkDir::new(path)
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_type().is_file())
+        {
+            let file_path = entry.path();
+            // Skip files with unsupported extensions (unless --comment-style is set)
+            if opts.comment_style_override.is_empty()
+                && core::get_comment_style(file_path, opts.mode, opts.config).is_err()
+            {
+                continue;
+            }
+            match process_file(file_path, cli, opts) {
+                Ok(mut file_results) => results.append(&mut file_results),
+                Err(e) => {
+                    if opts.verbose {
+                        eprintln!("  Skipping {}: {}", file_path.display(), e);
+                    }
+                }
+            }
+        }
+        return Ok(results);
+    }
+
+    process_file(path, cli, opts)
+}
+
+fn process_file(path: &Path, cli: &Cli, opts: &ToggleOptions) -> Result<Vec<ProcessResult>> {
     // --strict-ext: reject non-.py files
     if cli.strict_ext {
         let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
