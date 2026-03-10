@@ -79,7 +79,7 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
-      - uses: EmbarkStudios/cargo-deny-action@d6d27f1b02f0c07f9db6ffc34e7871bba5ab5816 # v2.0.9
+      - uses: EmbarkStudios/cargo-deny-action@3fd3802e88374d3fe9159b834c7714ec57d6c979 # v2.0.15
 
   coverage:
     name: Code coverage
@@ -121,6 +121,23 @@ jobs:
           # Compare against this repo's main branch, not the unrelated
           # "toggle" crate on crates.io which has a different API surface.
           baseline-rev: origin/main
+
+  toml-lint:
+    name: TOML lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - uses: taiki-e/install-action@899b013517f9e7774591216672bf75a46bb9a481 # v2.9.4
+        with:
+          tool: taplo-cli
+
+      - name: Check TOML formatting
+        run: taplo fmt --check
+
+      - name: Lint TOML files
+        run: taplo lint
 
   actionlint:
     name: Lint GitHub Actions

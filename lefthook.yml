@@ -8,6 +8,9 @@ pre-commit:
     actionlint:
       glob: ".github/workflows/*.{yml,yaml}"
       run: actionlint {staged_files}
+    toml-lint:
+      glob: "*.toml"
+      run: taplo fmt --check {staged_files}
 
 pre-push:
   commands:
