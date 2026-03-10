@@ -2,12 +2,7 @@
 # Used by EmbarkStudios/cargo-deny-action in CI
 
 [advisories]
-# Deny any crates with known security vulnerabilities
-vulnerability = "deny"
-# Warn about unmaintained crates
-unmaintained = "warn"
-# Warn about crates that have been yanked
-yanked = "warn"
+version = 2
 
 [licenses]
 # Allow common permissive licenses used by toggle's dependencies
