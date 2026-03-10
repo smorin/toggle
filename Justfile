@@ -129,17 +129,16 @@ alias rr := run-release
 
 alias b := build
 
-# Set up pre-commit hooks
+# Set up pre-commit hooks (install lefthook hooks into .git)
 [group('pre-commit')]
 @pre-commit-setup:
-    cargo install cargo-husky
-    cargo husky install
+    lefthook install
+    echo "{{GREEN}}Pre-commit hooks installed via lefthook.{{NC}}"
 
-
-# Run all pre-commit Hooks
+# Run all pre-commit checks manually
 [group('pre-commit')]
 @pre-commit-run:
-    cargo husky run --all
+    lefthook run pre-commit
 
 alias pc := pre-commit-run
 
