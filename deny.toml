@@ -1,0 +1,34 @@
+# Configuration for cargo-deny (https://embarkstudios.github.io/cargo-deny/)
+# Used by EmbarkStudios/cargo-deny-action in CI
+
+[advisories]
+# Deny any crates with known security vulnerabilities
+vulnerability = "deny"
+# Warn about unmaintained crates
+unmaintained = "warn"
+# Warn about crates that have been yanked
+yanked = "warn"
+
+[licenses]
+# Allow common permissive licenses used by toggle's dependencies
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+]
+
+[bans]
+# Warn when multiple versions of the same crate are pulled in
+multiple-versions = "warn"
+
+[sources]
+# Deny crates from unknown registries or git repos
+unknown-registry = "deny"
+unknown-git = "deny"
+# Allow crates from crates.io
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

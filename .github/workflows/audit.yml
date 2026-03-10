@@ -1,0 +1,28 @@
+name: Security Audit
+
+on:
+  # Run daily to catch newly published advisories
+  schedule:
+    - cron: '0 0 * * *'
+  # Allow manual trigger
+  workflow_dispatch:
+  # Run on changes to dependency files
+  push:
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'deny.toml'
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  audit:
+    name: Security audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - uses: actions-rust-lang/audit@72c09e02f132669d52284a3323acdb503cfc1a24 # v1.2.7
