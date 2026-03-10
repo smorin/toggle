@@ -8,6 +8,7 @@ use toggle::config::ToggleConfig;
 use toggle::core;
 use toggle::exit_codes::{ExitCode, UsageError};
 use toggle::io;
+use toggle::walk;
 
 /// Bundled options passed through the toggle pipeline.
 struct ToggleOptions<'a> {
@@ -120,6 +121,26 @@ fn run(cli: &Cli) -> Result<()> {
             .map(String::from)
     };
 
+    // Handle --scan mode early (read-only, no toggle options needed)
+    if cli.scan {
+        if !cli.lines.is_empty() {
+            return Err(
+                UsageError("--scan cannot be combined with --line".into()).into(),
+            );
+        }
+        if !cli.sections.is_empty() {
+            return Err(
+                UsageError("--scan cannot be combined with --section".into()).into(),
+            );
+        }
+        if cli.force.is_some() {
+            return Err(
+                UsageError("--scan cannot be combined with --force".into()).into(),
+            );
+        }
+        return run_scan(cli);
+    }
+
     // Validate --encoding value
     if !io::is_valid_encoding(&cli.encoding) {
         return Err(UsageError(format!("Unsupported encoding: '{}'", cli.encoding)).into());
@@ -174,8 +195,14 @@ fn run(cli: &Cli) -> Result<()> {
     }
 }
 
+fn resolve_paths(cli: &Cli) -> Result<Vec<std::path::PathBuf>> {
+    let walk_opts = walk::WalkOptions::default();
+    walk::collect_files(&cli.paths, cli.recursive, &walk_opts)
+}
+
 fn run_normal(cli: &Cli, opts: &ToggleOptions) -> Result<()> {
-    for path in &cli.paths {
+    let files = resolve_paths(cli)?;
+    for path in &files {
         process_path(path, cli, opts)
             .with_context(|| format!("Failed to process {}", path.display()))?;
     }
@@ -183,10 +210,11 @@ fn run_normal(cli: &Cli, opts: &ToggleOptions) -> Result<()> {
 }
 
 fn run_json(cli: &Cli, opts: &ToggleOptions) -> Result<()> {
+    let files = resolve_paths(cli)?;
     let mut results: Vec<ToggleResult> = Vec::new();
     let mut had_error = false;
 
-    for path in &cli.paths {
+    for path in &files {
         match process_path(path, cli, opts) {
             Ok(proc_results) => {
                 for pr in proc_results {
@@ -469,4 +497,61 @@ fn toggle_section(path: &Path, section_id: &str, opts: &ToggleOptions) -> Result
         action: "toggle_section".to_string(),
         lines_changed,
     })
+}
+
+fn run_scan(cli: &Cli) -> Result<()> {
+    let walk_opts = walk::WalkOptions::default();
+    // --scan is implicitly recursive
+    let files = walk::collect_files(&cli.paths, true, &walk_opts)?;
+
+    let mut all_sections: Vec<core::SectionInfo> = Vec::new();
+    for file_path in &files {
+        match io::read_file_encoded(file_path, &cli.encoding) {
+            Ok(content) => {
+                let sections = core::scan_sections(file_path, &content);
+                all_sections.extend(sections);
+            }
+            Err(e) => {
+                if cli.verbose {
+                    eprintln!("Warning: skipping {}: {}", file_path.display(), e);
+                }
+            }
+        }
+    }
+
+    if cli.json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&all_sections).expect("Failed to serialize JSON")
+        );
+    } else {
+        print_scan_results(&all_sections);
+    }
+    Ok(())
+}
+
+fn print_scan_results(sections: &[core::SectionInfo]) {
+    if sections.is_empty() {
+        println!("No toggle sections found.");
+        return;
+    }
+
+    // Print header
+    println!(
+        "{:<20} {:<45} {:<12} {:<14} Description",
+        "Section ID", "File", "Lines", "State"
+    );
+    println!("{}", "\u{2500}".repeat(100));
+
+    for s in sections {
+        let end = s
+            .end_line
+            .map_or("???".to_string(), |e| e.to_string());
+        let lines_str = format!("{}-{}", s.start_line, end);
+        let desc = s.description.as_deref().unwrap_or("");
+        println!(
+            "{:<20} {:<45} {:<12} {:<14} {}",
+            s.id, s.file, lines_str, s.state, desc
+        );
+    }
 }

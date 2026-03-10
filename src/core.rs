@@ -7,6 +7,127 @@ use std::path::Path;
 use crate::config::ToggleConfig;
 use crate::exit_codes::UsageError;
 
+/// Returns the list of file extensions that toggle knows how to handle.
+pub fn supported_extensions() -> &'static [&'static str] {
+    &[
+        "py", "sh", "rb", "yaml", "yml", "toml", "r", "ex", "exs", "pl", "pm", "js", "jsx",
+        "ts", "tsx", "rs", "java", "c", "cpp", "go", "swift", "kt", "scala", "php", "lua", "hs",
+        "sql",
+    ]
+}
+
+/// Information about a discovered toggle section.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct SectionInfo {
+    pub id: String,
+    pub file: String,
+    pub start_line: usize,
+    pub end_line: Option<usize>,
+    pub description: Option<String>,
+    pub state: String,
+}
+
+/// Scan file content for toggle:start / toggle:end markers.
+/// Returns all sections found. Does not modify anything.
+pub fn scan_sections(path: &Path, content: &str) -> Vec<SectionInfo> {
+    let lines: Vec<&str> = content.lines().collect();
+    let mut sections = Vec::new();
+    let file_str = path.display().to_string();
+
+    // Determine comment style for state detection
+    let comment_marker = get_comment_style(path, "auto", None)
+        .map(|cs| cs.single_line)
+        .unwrap_or_else(|_| "#".to_string());
+
+    let mut i = 0;
+    while i < lines.len() {
+        if let Some(pos) = lines[i].find("toggle:start ID=") {
+            let after_id = &lines[i][pos + "toggle:start ID=".len()..];
+            let id = after_id
+                .split_whitespace()
+                .next()
+                .unwrap_or("")
+                .to_string();
+
+            // Extract optional description
+            let description = extract_description(lines[i]);
+
+            let start_line = i + 1; // 1-based
+
+            // Find matching end marker
+            let end_marker = format!("toggle:end ID={}", id);
+            let mut end_line = None;
+            for (j, line) in lines.iter().enumerate().skip(i + 1) {
+                if line.contains(&end_marker) {
+                    end_line = Some(j + 1); // 1-based
+                    break;
+                }
+            }
+
+            // Determine state of content between markers
+            let state = if let Some(end) = end_line {
+                let content_start = i + 1;
+                let content_end = end - 1; // back to 0-based for the end marker line
+                detect_section_state(&lines[content_start..content_end], &comment_marker)
+            } else {
+                "unknown".to_string()
+            };
+
+            sections.push(SectionInfo {
+                id,
+                file: file_str.clone(),
+                start_line,
+                end_line,
+                description,
+                state,
+            });
+
+            if let Some(end) = end_line {
+                i = end; // skip past end marker (end is 1-based, so 0-based index is end-1, next is end)
+            } else {
+                i += 1;
+            }
+        } else {
+            i += 1;
+        }
+    }
+
+    sections
+}
+
+/// Extract desc="..." from a toggle:start line.
+fn extract_description(line: &str) -> Option<String> {
+    let desc_prefix = "desc=\"";
+    if let Some(pos) = line.find(desc_prefix) {
+        let after = &line[pos + desc_prefix.len()..];
+        if let Some(end) = after.find('"') {
+            return Some(after[..end].to_string());
+        }
+    }
+    None
+}
+
+/// Detect whether section content is commented, uncommented, or mixed.
+fn detect_section_state(lines: &[&str], comment_marker: &str) -> String {
+    let non_empty: Vec<&&str> = lines.iter().filter(|l| !l.trim().is_empty()).collect();
+    if non_empty.is_empty() {
+        return "empty".to_string();
+    }
+
+    let commented_count = non_empty
+        .iter()
+        .filter(|l| l.trim_start().starts_with(comment_marker))
+        .count();
+
+    if commented_count == non_empty.len() {
+        "commented".to_string()
+    } else if commented_count == 0 {
+        "uncommented".to_string()
+    } else {
+        "mixed".to_string()
+    }
+}
+
 /// Line range representation
 #[derive(Debug, Clone)]
 pub struct LineRange {
