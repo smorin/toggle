@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - 'v[0-9]+.*'
+      - 'v[0-9]+.[0-9]+.[0-9]+*'
   workflow_dispatch:
 
 permissions:
@@ -29,6 +29,12 @@ jobs:
           - os: windows-latest
             target: x86_64-pc-windows-msvc
     steps:
+      - name: Validate tag ref
+        if: github.ref_type != 'tag'
+        run: |
+          echo "::error::Release workflow must be triggered by a tag push, not a branch."
+          exit 1
+
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
@@ -40,9 +46,6 @@ jobs:
         run: sudo apt-get install -y musl-tools
 
       - uses: Swatinem/rust-cache@401aff9a7a08acb9d27b64936a90db81024cff97 # v2.8.2
-
-      - name: Build release binary
-        run: cargo build --release --target ${{ matrix.target }}
 
       - name: Upload binary to release
         uses: taiki-e/upload-rust-binary-action@57510bf386b3945b57963e73201cea60ca18dff4 # v1.9.1
