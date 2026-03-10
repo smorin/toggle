@@ -121,6 +121,11 @@ fn run(cli: &Cli) -> Result<()> {
             .map(String::from)
     };
 
+    // Validate --encoding value (before --scan so it applies to all modes)
+    if !io::is_valid_encoding(&cli.encoding) {
+        return Err(UsageError(format!("Unsupported encoding: '{}'", cli.encoding)).into());
+    }
+
     // Handle --scan mode early (read-only, no toggle options needed)
     if cli.scan {
         if !cli.lines.is_empty() {
@@ -139,11 +144,6 @@ fn run(cli: &Cli) -> Result<()> {
             );
         }
         return run_scan(cli);
-    }
-
-    // Validate --encoding value
-    if !io::is_valid_encoding(&cli.encoding) {
-        return Err(UsageError(format!("Unsupported encoding: '{}'", cli.encoding)).into());
     }
 
     // Validate --comment-style: must be 1 or 3 values
@@ -196,7 +196,10 @@ fn run(cli: &Cli) -> Result<()> {
 }
 
 fn resolve_paths(cli: &Cli) -> Result<Vec<std::path::PathBuf>> {
-    let walk_opts = walk::WalkOptions::default();
+    let walk_opts = walk::WalkOptions {
+        verbose: cli.verbose,
+        ..walk::WalkOptions::default()
+    };
     walk::collect_files(&cli.paths, cli.recursive, &walk_opts)
 }
 
@@ -500,9 +503,19 @@ fn toggle_section(path: &Path, section_id: &str, opts: &ToggleOptions) -> Result
 }
 
 fn run_scan(cli: &Cli) -> Result<()> {
-    let walk_opts = walk::WalkOptions::default();
+    let walk_opts = walk::WalkOptions {
+        verbose: cli.verbose,
+        ..walk::WalkOptions::default()
+    };
     // --scan is implicitly recursive
     let files = walk::collect_files(&cli.paths, true, &walk_opts)?;
+
+    // Warn about paths that don't exist on disk
+    for path in &cli.paths {
+        if !path.exists() {
+            eprintln!("Warning: '{}' does not exist", path.display());
+        }
+    }
 
     let mut all_sections: Vec<core::SectionInfo> = Vec::new();
     for file_path in &files {

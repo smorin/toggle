@@ -11,6 +11,7 @@ use crate::exit_codes::UsageError;
 pub struct WalkOptions {
     pub skip_hidden: bool,
     pub max_depth: Option<usize>,
+    pub verbose: bool,
 }
 
 impl Default for WalkOptions {
@@ -18,6 +19,7 @@ impl Default for WalkOptions {
         Self {
             skip_hidden: true,
             max_depth: None,
+            verbose: false,
         }
     }
 }
@@ -118,7 +120,9 @@ fn walk_directory(dir: &Path, opts: &WalkOptions, files: &mut Vec<PathBuf>) -> R
             }
             Err(e) => {
                 // Skip unreadable entries but continue walking
-                eprintln!("Warning: {}", e);
+                if opts.verbose {
+                    eprintln!("Warning: {}", e);
+                }
             }
         }
     }

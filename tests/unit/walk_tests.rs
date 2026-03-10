@@ -136,6 +136,7 @@ fn test_collect_files_max_depth() {
     let opts = WalkOptions {
         skip_hidden: true,
         max_depth: Some(2), // root + 1 level
+        verbose: false,
     };
     let files = collect_files(&[dir.path().to_path_buf()], true, &opts).unwrap();
     assert!(files.iter().any(|f| f.ends_with("top.py")));
