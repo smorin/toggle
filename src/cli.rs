@@ -81,4 +81,8 @@ pub struct Cli {
     /// Path to .toggleConfig TOML file
     #[arg(long = "config")]
     pub config: Option<PathBuf>,
+
+    /// Recursively search directories for files to process
+    #[arg(short = 'R', long = "recursive")]
+    pub recursive: bool,
 }
