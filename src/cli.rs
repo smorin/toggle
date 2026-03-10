@@ -26,8 +26,8 @@ pub struct Cli {
     #[arg(long = "list-sections")]
     pub list_sections: bool,
 
-    /// Force toggle state (on/off)
-    #[arg(short = 'f', long = "force")]
+    /// Force toggle state (on/off/invert)
+    #[arg(short = 'f', long = "force", visible_short_alias = 'F')]
     pub force: Option<String>,
 
     /// Comment mode (auto/single/multi)

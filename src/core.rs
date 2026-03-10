@@ -512,7 +512,13 @@ pub fn get_comment_style(
     comment_styles
         .get(extension)
         .cloned()
-        .ok_or_else(|| UsageError(format!("Unsupported file extension: .{}", extension)).into())
+        .ok_or_else(|| {
+            UsageError(format!(
+                "Unsupported file extension: .{}; use --comment-style or --config with a [global] single_line_delimiter",
+                extension
+            ))
+            .into()
+        })
 }
 
 /// Find section markers and toggle the content between them.
