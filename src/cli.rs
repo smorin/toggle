@@ -5,7 +5,6 @@ use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(author, version, about)]
-#[non_exhaustive]
 pub struct Cli {
     /// File or directory paths to process
     #[arg(required = true)]
