@@ -15,6 +15,19 @@ fn setup_temp_file(content: &str, filename: &str) -> (TempDir, std::path::PathBu
     (dir, path)
 }
 
+/// Create a temp directory with multiple files, supporting subdirectories.
+fn setup_temp_dir_with_files(files: &[(&str, &str)]) -> TempDir {
+    let dir = TempDir::new().unwrap();
+    for (name, content) in files {
+        let path = dir.path().join(name);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).unwrap();
+        }
+        fs::write(&path, content).unwrap();
+    }
+    dir
+}
+
 // ── Repeatable --line ranges (Phase 2) ──
 
 #[test]
@@ -773,4 +786,204 @@ fn test_json_with_dry_run() {
     // File should not be modified
     let after = fs::read_to_string(&path).unwrap();
     assert_eq!(after, "hello\nworld\n");
+}
+
+// ── Recursive directory walking (-R) ──
+
+#[test]
+fn test_recursive_walks_directory() {
+    let dir = setup_temp_dir_with_files(&[
+        ("a.py", "hello\n"),
+        ("sub/b.py", "world\n"),
+    ]);
+    cmd()
+        .args([dir.path().to_str().unwrap(), "-R", "-l", "1:1"])
+        .assert()
+        .success();
+    let a = fs::read_to_string(dir.path().join("a.py")).unwrap();
+    let b = fs::read_to_string(dir.path().join("sub/b.py")).unwrap();
+    assert!(a.contains("# hello"), "a.py should be toggled");
+    assert!(b.contains("# world"), "sub/b.py should be toggled");
+}
+
+#[test]
+fn test_recursive_cross_file_section_toggle() {
+    let dir = setup_temp_dir_with_files(&[
+        ("a.py", "before\n# toggle:start ID=feat1\nhello\n# toggle:end ID=feat1\nafter\n"),
+        ("sub/b.py", "top\n# toggle:start ID=feat1\nworld\n# toggle:end ID=feat1\nbottom\n"),
+        ("sub/deep/c.py", "x\n# toggle:start ID=feat1\nfoo\n# toggle:end ID=feat1\ny\n"),
+    ]);
+    cmd()
+        .args([dir.path().to_str().unwrap(), "-R", "-S", "feat1", "-f", "on"])
+        .assert()
+        .success();
+    let a = fs::read_to_string(dir.path().join("a.py")).unwrap();
+    let b = fs::read_to_string(dir.path().join("sub/b.py")).unwrap();
+    let c = fs::read_to_string(dir.path().join("sub/deep/c.py")).unwrap();
+    assert!(a.contains("# hello"), "a.py section should be commented");
+    assert!(b.contains("# world"), "sub/b.py section should be commented");
+    assert!(c.contains("# foo"), "sub/deep/c.py section should be commented");
+}
+
+#[test]
+fn test_recursive_skips_unsupported_extensions() {
+    let dir = setup_temp_dir_with_files(&[
+        ("a.py", "before\n# toggle:start ID=feat1\nhello\n# toggle:end ID=feat1\nafter\n"),
+        ("readme.md", "# Some markdown\n"),
+        ("data.txt", "plain text\n"),
+    ]);
+    cmd()
+        .args([dir.path().to_str().unwrap(), "-R", "-S", "feat1", "-f", "on"])
+        .assert()
+        .success();
+    let a = fs::read_to_string(dir.path().join("a.py")).unwrap();
+    assert!(a.contains("# hello"), "a.py section should be toggled");
+    // .md and .txt files should be unchanged
+    let md = fs::read_to_string(dir.path().join("readme.md")).unwrap();
+    assert_eq!(md, "# Some markdown\n");
+}
+
+#[test]
+fn test_recursive_skips_files_without_matching_section() {
+    let dir = setup_temp_dir_with_files(&[
+        ("a.py", "before\n# toggle:start ID=feat1\nhello\n# toggle:end ID=feat1\nafter\n"),
+        ("b.py", "no sections here\n"),
+        ("c.py", "# toggle:start ID=other\nstuff\n# toggle:end ID=other\n"),
+    ]);
+    cmd()
+        .args([dir.path().to_str().unwrap(), "-R", "-S", "feat1", "-f", "on"])
+        .assert()
+        .success();
+    let a = fs::read_to_string(dir.path().join("a.py")).unwrap();
+    assert!(a.contains("# hello"), "a.py should be toggled");
+    let b = fs::read_to_string(dir.path().join("b.py")).unwrap();
+    assert_eq!(b, "no sections here\n", "b.py should be unchanged");
+    let c = fs::read_to_string(dir.path().join("c.py")).unwrap();
+    assert!(c.contains("stuff"), "c.py should be unchanged (different section ID)");
+}
+
+#[test]
+fn test_recursive_force_applies_uniformly() {
+    let dir = setup_temp_dir_with_files(&[
+        ("a.py", "before\n# toggle:start ID=feat1\n# already_on\n# toggle:end ID=feat1\nafter\n"),
+        ("b.py", "top\n# toggle:start ID=feat1\n# also_on\n# toggle:end ID=feat1\nbottom\n"),
+    ]);
+    // Force off: uncomment all
+    cmd()
+        .args([dir.path().to_str().unwrap(), "-R", "-S", "feat1", "-f", "off"])
+        .assert()
+        .success();
+    let a = fs::read_to_string(dir.path().join("a.py")).unwrap();
+    let b = fs::read_to_string(dir.path().join("b.py")).unwrap();
+    assert!(a.contains("already_on") && !a.contains("# already_on"), "a.py should be uncommented");
+    assert!(b.contains("also_on") && !b.contains("# also_on"), "b.py should be uncommented");
+}
+
+// ── --list-sections discovery mode ──
+
+#[test]
+fn test_list_sections_discovery() {
+    let dir = setup_temp_dir_with_files(&[
+        ("a.py", "# toggle:start ID=feat1 desc=\"Feature one\"\nhello\n# toggle:end ID=feat1\n"),
+        ("b.py", "# toggle:start ID=feat2\nworld\n# toggle:end ID=feat2\n"),
+        ("sub/c.py", "# toggle:start ID=feat1\nfoo\n# toggle:end ID=feat1\n"),
+    ]);
+    let output = cmd()
+        .args([dir.path().to_str().unwrap(), "-R", "--list-sections"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("feat1"), "should list feat1");
+    assert!(stdout.contains("feat2"), "should list feat2");
+    assert!(stdout.contains("Feature one"), "should show desc for feat1");
+}
+
+#[test]
+fn test_list_sections_json() {
+    let dir = setup_temp_dir_with_files(&[
+        ("a.py", "# toggle:start ID=feat1 desc=\"Feature one\"\nhello\n# toggle:end ID=feat1\n"),
+        ("sub/b.py", "# toggle:start ID=feat1\nworld\n# toggle:end ID=feat1\n"),
+    ]);
+    let output = cmd()
+        .args([dir.path().to_str().unwrap(), "-R", "--list-sections", "--json"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let json: Vec<Value> = serde_json::from_slice(&output.stdout)
+        .expect("stdout should be valid JSON");
+    assert_eq!(json.len(), 1, "should have one section ID");
+    assert_eq!(json[0]["id"], "feat1");
+    assert_eq!(json[0]["desc"], "Feature one");
+    let files = json[0]["files"].as_array().unwrap();
+    assert_eq!(files.len(), 2, "feat1 should appear in 2 files");
+    assert!(files[0]["file"].as_str().is_some());
+    assert!(files[0]["start_line"].as_u64().is_some());
+    assert!(files[0]["end_line"].as_u64().is_some());
+}
+
+#[test]
+fn test_list_sections_conflicts_with_line_flag() {
+    let dir = setup_temp_dir_with_files(&[
+        ("a.py", "hello\n"),
+    ]);
+    cmd()
+        .args([dir.path().join("a.py").to_str().unwrap(), "--list-sections", "-l", "1:1"])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains("--list-sections cannot be combined with --line"));
+}
+
+#[test]
+fn test_list_sections_conflicts_with_force_flag() {
+    let dir = setup_temp_dir_with_files(&[
+        ("a.py", "hello\n"),
+    ]);
+    cmd()
+        .args([dir.path().join("a.py").to_str().unwrap(), "--list-sections", "-f", "on"])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains("--list-sections cannot be combined with --force"));
+}
+
+// ── Cross-file JSON output ──
+
+#[test]
+fn test_cross_file_json_output() {
+    let dir = setup_temp_dir_with_files(&[
+        ("a.py", "# toggle:start ID=feat1 desc=\"My feature\"\nhello\n# toggle:end ID=feat1\n"),
+        ("sub/b.py", "# toggle:start ID=feat1\nworld\n# toggle:end ID=feat1\n"),
+    ]);
+    let output = cmd()
+        .args([dir.path().to_str().unwrap(), "-R", "-S", "feat1", "-f", "on", "--json"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let json: Vec<Value> = serde_json::from_slice(&output.stdout)
+        .expect("stdout should be valid JSON");
+    assert_eq!(json.len(), 2, "should have per-file entries");
+    for entry in &json {
+        assert_eq!(entry["action"], "toggle_section");
+        assert_eq!(entry["success"], true);
+        assert_eq!(entry["section_id"], "feat1");
+        assert!(entry["lines_changed"].as_u64().unwrap() > 0);
+    }
+    // At least one entry should have desc
+    let has_desc = json.iter().any(|e| e["desc"] == "My feature");
+    assert!(has_desc, "at least one entry should have desc");
+}
+
+// ── Section desc= in verbose output ──
+
+#[test]
+fn test_section_desc_in_verbose_output() {
+    let content = "# toggle:start ID=feat1 desc=\"Debug logging\"\nhello\n# toggle:end ID=feat1\n";
+    let (_dir, path) = setup_temp_file(content, "test.py");
+    let output = cmd()
+        .args([path.to_str().unwrap(), "-S", "feat1", "-f", "on", "-v"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(stderr.contains("Section desc: Debug logging"), "verbose should show desc");
 }

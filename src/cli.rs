@@ -18,6 +18,14 @@ pub struct Cli {
     #[arg(short = 'S', long = "section", action = clap::ArgAction::Append)]
     pub sections: Vec<String>,
 
+    /// Recursively walk directories
+    #[arg(short = 'R', long = "recursive")]
+    pub recursive: bool,
+
+    /// List all section IDs found in files (discovery mode, no toggling)
+    #[arg(long = "list-sections")]
+    pub list_sections: bool,
+
     /// Force toggle state (on/off)
     #[arg(short = 'f', long = "force")]
     pub force: Option<String>,
