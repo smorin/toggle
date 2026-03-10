@@ -25,6 +25,8 @@ impl LineRange {
 #[derive(Debug, Clone)]
 pub struct CommentStyle {
     pub single_line: String,
+    pub multi_line_start: Option<String>,
+    pub multi_line_end: Option<String>,
 }
 
 /// Parse a line range specification.
@@ -210,6 +212,86 @@ fn toggle_comments_inner(
     result
 }
 
+/// Toggle comments using multi-line/block comment delimiters.
+/// For each merged range, wraps the content in start/end delimiters (commenting)
+/// or strips them (uncommenting). Force mode works the same as single-line.
+pub fn toggle_comments_multi(
+    content: &str,
+    ranges: &[LineRange],
+    force_mode: Option<&str>,
+    start_delim: &str,
+    end_delim: &str,
+) -> String {
+    let mut lines: Vec<String> = content.lines().map(String::from).collect();
+    let merged = merge_ranges(ranges);
+
+    for range in &merged {
+        let start = range.start.saturating_sub(1);
+        let end = range.end.min(lines.len());
+
+        if start >= lines.len() || start >= end {
+            continue;
+        }
+
+        // Detect if the range is already block-commented:
+        // first non-blank line starts with start_delim, last non-blank line ends with end_delim
+        let first_trimmed = lines[start].trim_start();
+        let last_trimmed = lines[end - 1].trim_end();
+        let is_commented =
+            first_trimmed.starts_with(start_delim) && last_trimmed.ends_with(end_delim);
+
+        let should_comment = match force_mode {
+            Some("on") => true,
+            Some("off") => false,
+            _ => !is_commented,
+        };
+
+        if should_comment && !is_commented {
+            // Wrap: prepend start_delim to first line, append end_delim to last line
+            let first_line = &lines[start];
+            let leading_ws: String = first_line
+                .chars()
+                .take_while(|c| c.is_whitespace())
+                .collect();
+            let rest = &first_line[leading_ws.len()..];
+            lines[start] = format!("{}{} {}", leading_ws, start_delim, rest);
+
+            let last_line = &lines[end - 1];
+            lines[end - 1] = format!("{} {}", last_line, end_delim);
+        } else if !should_comment && is_commented {
+            // Unwrap: strip start_delim from first line, strip end_delim from last line
+            let first_line = &lines[start];
+            let leading_ws: String = first_line
+                .chars()
+                .take_while(|c| c.is_whitespace())
+                .collect();
+            let rest = &first_line[leading_ws.len()..];
+            let stripped_start = if let Some(s) = rest.strip_prefix(start_delim) {
+                let s = s.strip_prefix(' ').unwrap_or(s);
+                format!("{}{}", leading_ws, s)
+            } else {
+                first_line.clone()
+            };
+            lines[start] = stripped_start;
+
+            let last_line = &lines[end - 1];
+            let stripped_end = if let Some(s) = last_line.strip_suffix(end_delim) {
+                let s = s.strip_suffix(' ').unwrap_or(s);
+                s.to_string()
+            } else {
+                last_line.clone()
+            };
+            lines[end - 1] = stripped_end;
+        }
+    }
+
+    let mut result = lines.join("\n");
+    if content.ends_with('\n') {
+        result.push('\n');
+    }
+    result
+}
+
 /// Map file extension to language name for config lookup
 fn ext_to_language(ext: &str) -> &str {
     match ext {
@@ -254,8 +336,11 @@ pub fn get_comment_style(
         let lang = ext_to_language(extension);
         // Language-specific override
         if let Some(delimiter) = cfg.get_language_delimiter(lang) {
+            let multi = cfg.get_language_multi_line_delimiters(lang);
             return Ok(CommentStyle {
                 single_line: delimiter.to_string(),
+                multi_line_start: multi.map(|(s, _)| s.to_string()),
+                multi_line_end: multi.map(|(_, e)| e.to_string()),
             });
         }
         // Global override
@@ -264,14 +349,21 @@ pub fn get_comment_style(
             .as_ref()
             .and_then(|g| g.single_line_delimiter.as_deref())
         {
+            let global = cfg.global.as_ref();
             return Ok(CommentStyle {
                 single_line: delimiter.to_string(),
+                multi_line_start: global
+                    .and_then(|g| g.multi_line_delimiter_start.as_deref())
+                    .map(String::from),
+                multi_line_end: global
+                    .and_then(|g| g.multi_line_delimiter_end.as_deref())
+                    .map(String::from),
             });
         }
     }
 
     let mut comment_styles = HashMap::new();
-    // Hash-style comments
+    // Hash-style comments (no multi-line)
     for ext in &[
         "py", "sh", "rb", "yaml", "yml", "toml", "r", "ex", "exs", "pl", "pm",
     ] {
@@ -279,10 +371,12 @@ pub fn get_comment_style(
             *ext,
             CommentStyle {
                 single_line: "#".to_string(),
+                multi_line_start: None,
+                multi_line_end: None,
             },
         );
     }
-    // Slash-style comments
+    // Slash-style comments with /* */ multi-line
     for ext in &[
         "js", "jsx", "ts", "tsx", "rs", "java", "c", "cpp", "go", "swift", "kt", "scala", "php",
     ] {
@@ -290,18 +384,36 @@ pub fn get_comment_style(
             *ext,
             CommentStyle {
                 single_line: "//".to_string(),
+                multi_line_start: Some("/*".to_string()),
+                multi_line_end: Some("*/".to_string()),
             },
         );
     }
     // Dash-style comments
-    for ext in &["lua", "hs", "sql"] {
-        comment_styles.insert(
-            *ext,
-            CommentStyle {
-                single_line: "--".to_string(),
-            },
-        );
-    }
+    comment_styles.insert(
+        "lua",
+        CommentStyle {
+            single_line: "--".to_string(),
+            multi_line_start: Some("--[[".to_string()),
+            multi_line_end: Some("]]".to_string()),
+        },
+    );
+    comment_styles.insert(
+        "hs",
+        CommentStyle {
+            single_line: "--".to_string(),
+            multi_line_start: Some("{-".to_string()),
+            multi_line_end: Some("-}".to_string()),
+        },
+    );
+    comment_styles.insert(
+        "sql",
+        CommentStyle {
+            single_line: "--".to_string(),
+            multi_line_start: Some("/*".to_string()),
+            multi_line_end: Some("*/".to_string()),
+        },
+    );
 
     comment_styles
         .get(extension)
@@ -339,9 +451,7 @@ pub fn find_and_toggle_section(
             let section_end = match section_end {
                 Some(end) => end,
                 None => {
-                    return Err(
-                        UsageError(format!("Unclosed section ID={}", section_id)).into()
-                    );
+                    return Err(UsageError(format!("Unclosed section ID={}", section_id)).into());
                 }
             };
 

@@ -230,6 +230,8 @@ fn test_get_comment_style_unsupported() {
 fn test_section_toggle_preserves_trailing_empty_lines() {
     let style = CommentStyle {
         single_line: "#".to_string(),
+        multi_line_start: None,
+        multi_line_end: None,
     };
     let mut lines = vec![
         "# toggle:start ID=sec1".to_string(),

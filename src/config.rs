@@ -46,4 +46,21 @@ impl ToggleConfig {
             .and_then(|langs| langs.get(lang))
             .and_then(|lc| lc.single_line_delimiter.as_deref())
     }
+
+    /// Get multi-line comment delimiters for a given language name.
+    /// Returns None if no language-specific multi-line override is configured.
+    pub fn get_language_multi_line_delimiters(&self, lang: &str) -> Option<(&str, &str)> {
+        self.language
+            .as_ref()
+            .and_then(|langs| langs.get(lang))
+            .and_then(|lc| {
+                match (
+                    lc.multi_line_delimiter_start.as_deref(),
+                    lc.multi_line_delimiter_end.as_deref(),
+                ) {
+                    (Some(start), Some(end)) => Some((start, end)),
+                    _ => None,
+                }
+            })
+    }
 }
