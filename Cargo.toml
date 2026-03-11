@@ -36,6 +36,12 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # Encoding support
 encoding_rs = "0.8"
+# SHA-256 checksums for atomic journal integrity
+sha2 = "0.10"
+# Signal handling for graceful interrupt during atomic commits
+signal-hook = "0.3"
+# Cross-platform advisory file locking for concurrent atomic execution prevention
+fd-lock = "4"
 
 [package.metadata.cargo-semver-checks.lints]
 constructible_struct_adds_field = "allow"

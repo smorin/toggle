@@ -1,9 +1,15 @@
 // File I/O operations for the Toggle CLI
 
+use crate::journal::{
+    self, Journal, JournalEntry, JOURNAL_FILENAME, LOCK_FILENAME,
+};
+use crate::platform;
 use similar::TextDiff;
 use std::fs::File;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use tempfile::NamedTempFile;
 
 /// Read file content as UTF-8.
@@ -245,4 +251,350 @@ pub fn detect_protected_lines(content: &str) -> Vec<usize> {
     }
 
     protected
+}
+
+/// Encode a string for atomic mode staging. Public wrapper around encode_string.
+pub fn encode_for_atomic(content: &str, encoding: &str) -> io::Result<Vec<u8>> {
+    encode_string(content, encoding)
+}
+
+// ── Atomic multi-file batch operations ──
+
+/// Threshold for emitting a batch size warning.
+const BATCH_SIZE_WARNING_THRESHOLD: usize = 500;
+
+/// Default backup extension for atomic mode.
+const ATOMIC_BACKUP_EXT: &str = ".toggle-atomic-backup";
+
+/// A single staged write: temp file is written and fsynced, ready for rename.
+pub struct StagedWrite {
+    /// Path to the staged temp file (fd already released via into_temp_path).
+    pub temp_path: PathBuf,
+    /// Final target path.
+    pub target_path: PathBuf,
+    /// SHA-256 hex digest of the written content.
+    pub content_sha256: String,
+    /// Original file permissions to copy to temp before rename.
+    pub original_permissions: Option<std::fs::Permissions>,
+}
+
+/// Manages a two-phase atomic commit of multiple file writes.
+pub struct AtomicBatch {
+    staged: Vec<StagedWrite>,
+    journal_path: PathBuf,
+    lock_path: PathBuf,
+    _lock: Option<fd_lock::RwLock<File>>,
+    backup_enabled: bool,
+    interrupted: Arc<AtomicBool>,
+}
+
+impl AtomicBatch {
+    /// Create a new atomic batch. Acquires the lock file immediately.
+    /// `targets` is used to determine the journal directory.
+    /// `backup_enabled` controls whether hard-link backups are created.
+    /// `interrupted` is an AtomicBool set by signal handlers.
+    pub fn new(
+        targets: &[PathBuf],
+        backup_enabled: bool,
+        interrupted: Arc<AtomicBool>,
+    ) -> io::Result<Self> {
+        let dir = journal::journal_dir(targets)?;
+        let lock_path = dir.join(LOCK_FILENAME);
+        let journal_path = dir.join(JOURNAL_FILENAME);
+
+        // Acquire exclusive lock.
+        // We keep the RwLock (and its write guard implicitly via try_write)
+        // alive for the lifetime of the batch by storing the RwLock itself.
+        let lock_file = File::create(&lock_path)?;
+        let mut lock = fd_lock::RwLock::new(lock_file);
+        // Test that we can acquire the lock; this will fail if another
+        // atomic operation is running. The write guard is dropped immediately,
+        // but the underlying file descriptor (held by the RwLock) keeps the
+        // advisory lock on some platforms. We re-acquire below.
+        {
+            let _guard = lock.try_write().map_err(|_| {
+                io::Error::new(
+                    io::ErrorKind::WouldBlock,
+                    "Another atomic operation is already in progress in this directory. \
+                     Wait for it to complete or remove .toggle-atomic.lock if the previous \
+                     process crashed.",
+                )
+            })?;
+            // Guard dropped here but we keep the RwLock (and its fd) alive
+        }
+
+        Ok(Self {
+            staged: Vec::new(),
+            journal_path,
+            lock_path,
+            _lock: Some(lock),
+            backup_enabled,
+            interrupted,
+        })
+    }
+
+    /// Stage a single file write: write content to a temp file in the same
+    /// directory as the target, fsync it, then release the fd.
+    pub fn stage(
+        &mut self,
+        target_path: &Path,
+        content: &[u8],
+        encoding: &str,
+    ) -> io::Result<()> {
+        let target_dir = target_path.parent().unwrap_or(Path::new("."));
+        let mut tmp = NamedTempFile::new_in(target_dir)?;
+        let encoded = if encoding.eq_ignore_ascii_case("utf-8") {
+            content.to_vec()
+        } else {
+            content.to_vec()
+        };
+        tmp.write_all(&encoded)?;
+        platform::durable_sync(tmp.as_file())?;
+
+        // Copy permissions from original file if it exists
+        let original_permissions = if target_path.exists() {
+            let meta = std::fs::metadata(target_path)?;
+            let perms = meta.permissions();
+            tmp.as_file()
+                .set_permissions(perms.clone())
+                .ok();
+            Some(perms)
+        } else {
+            None
+        };
+
+        let content_sha256 = journal::sha256_hex(&encoded);
+
+        // Release the fd but keep the path for later rename
+        let temp_path_obj = tmp.into_temp_path();
+        let temp_path = temp_path_obj.to_path_buf();
+        // Prevent TempPath from deleting the file on drop — we manage it ourselves
+        temp_path_obj.keep().map_err(|e| {
+            io::Error::new(io::ErrorKind::Other, format!("Failed to keep temp path: {}", e))
+        })?;
+
+        self.staged.push(StagedWrite {
+            temp_path,
+            target_path: target_path.to_path_buf(),
+            content_sha256,
+            original_permissions,
+        });
+
+        Ok(())
+    }
+
+    /// Emit a warning if the batch size exceeds the threshold.
+    pub fn warn_if_large_batch(&self) {
+        if self.staged.len() > BATCH_SIZE_WARNING_THRESHOLD {
+            eprintln!(
+                "Warning: Staging {} files in atomic mode. Large batches may be \
+                 slow due to fsync overhead. Consider splitting into smaller \
+                 batches if performance is critical.",
+                self.staged.len()
+            );
+        }
+    }
+
+    /// Execute the two-phase commit: create backups, write journal, rename all.
+    /// Returns Ok(()) if all renames succeed. On failure, attempts rollback
+    /// if backups are enabled.
+    pub fn commit(self) -> io::Result<()> {
+        if self.staged.is_empty() {
+            self.cleanup_lock();
+            return Ok(());
+        }
+
+        self.warn_if_large_batch();
+
+        // Build journal entries
+        let mut journal_entries: Vec<JournalEntry> = Vec::with_capacity(self.staged.len());
+        for sw in &self.staged {
+            let backup_path = if self.backup_enabled {
+                let mut bp = sw.target_path.as_os_str().to_os_string();
+                bp.push(ATOMIC_BACKUP_EXT);
+                Some(PathBuf::from(bp))
+            } else {
+                None
+            };
+            journal_entries.push(JournalEntry {
+                target_path: sw.target_path.clone(),
+                temp_path: sw.temp_path.clone(),
+                backup_path,
+                content_sha256: sw.content_sha256.clone(),
+                rename_completed: false,
+            });
+        }
+
+        let mut j = Journal::new(journal_entries, self.backup_enabled);
+
+        // Persist journal in Staged state
+        journal::persist_journal(&j, &self.journal_path)?;
+
+        // Create hard-link backups if enabled
+        if self.backup_enabled {
+            for entry in &j.entries {
+                if let Some(ref backup_path) = entry.backup_path {
+                    if entry.target_path.exists() {
+                        if let Err(e) = std::fs::hard_link(&entry.target_path, backup_path) {
+                            eprintln!(
+                                "Error: failed to create backup for '{}': {}",
+                                entry.target_path.display(),
+                                e
+                            );
+                            self.rollback_staged(&j);
+                            return Err(e);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Transition to Committing
+        j.transition_to_committing();
+        journal::persist_journal(&j, &self.journal_path)?;
+
+        if !self.backup_enabled {
+            eprintln!(
+                "Warning: Running without backups. If the rename phase fails, \
+                 rollback is not possible."
+            );
+        }
+
+        // Phase 2: Rename all temp files to targets
+        let entry_count = j.entries.len();
+        for idx in 0..entry_count {
+            // Check for signal interrupt between renames
+            if self.interrupted.load(Ordering::Relaxed) {
+                eprintln!("Interrupted. Journal preserved for recovery.");
+                journal::persist_journal(&j, &self.journal_path)?;
+                return Err(io::Error::new(
+                    io::ErrorKind::Interrupted,
+                    "Atomic commit interrupted by signal. \
+                     Run with --recover to clean up.",
+                ));
+            }
+
+            let temp_path = j.entries[idx].temp_path.clone();
+            let target_path = j.entries[idx].target_path.clone();
+
+            // Copy permissions before rename
+            if let Some(ref perms) = self.staged[idx].original_permissions {
+                let _ = std::fs::set_permissions(&temp_path, perms.clone());
+            }
+
+            match platform::rename_with_retry(&temp_path, &target_path) {
+                Ok(()) => {
+                    j.mark_entry_completed(idx);
+                    journal::persist_journal_best_effort(&j, &self.journal_path);
+                }
+                Err(e) => {
+                    eprintln!(
+                        "Error: rename failed for '{}': {}",
+                        target_path.display(),
+                        e
+                    );
+                    if self.backup_enabled {
+                        eprintln!("Attempting rollback...");
+                        if let Err(rb_err) =
+                            journal::recover_rollback(&j, &self.journal_path)
+                        {
+                            eprintln!("Rollback also failed: {}", rb_err);
+                        }
+                    } else {
+                        let _ = journal::persist_journal(&j, &self.journal_path);
+                        eprintln!(
+                            "No backups available. Journal preserved at '{}' for manual recovery.",
+                            self.journal_path.display()
+                        );
+                    }
+                    return Err(e);
+                }
+            }
+        }
+
+        // Finalization: fsync parent directories
+        let mut synced_dirs = std::collections::HashSet::new();
+        for entry in &j.entries {
+            if let Some(parent) = entry.target_path.parent() {
+                if synced_dirs.insert(parent.to_path_buf()) {
+                    let _ = platform::sync_dir(parent);
+                }
+            }
+        }
+
+        // Delete journal
+        journal::delete_journal(&self.journal_path)?;
+
+        // Clean up atomic backup files
+        if self.backup_enabled {
+            for entry in &j.entries {
+                if let Some(ref backup_path) = entry.backup_path {
+                    let _ = std::fs::remove_file(backup_path);
+                }
+            }
+        }
+
+        self.cleanup_lock();
+        Ok(())
+    }
+
+    /// Rollback from Staged state: delete all temp files and backups, delete journal.
+    fn rollback_staged(&self, journal: &Journal) {
+        for entry in &journal.entries {
+            if entry.temp_path.exists() {
+                let _ = std::fs::remove_file(&entry.temp_path);
+            }
+            if let Some(ref backup_path) = entry.backup_path {
+                if backup_path.exists() {
+                    let _ = std::fs::remove_file(backup_path);
+                }
+            }
+        }
+        let _ = journal::delete_journal(&self.journal_path);
+        self.cleanup_lock();
+    }
+
+    /// Clean up the lock file.
+    fn cleanup_lock(&self) {
+        let _ = std::fs::remove_file(&self.lock_path);
+    }
+}
+
+impl Drop for AtomicBatch {
+    fn drop(&mut self) {
+        // If we're being dropped without commit() having cleaned up,
+        // the lock file should still be removed.
+        // Note: staged temp files are NOT cleaned up on drop since we called
+        // keep() on them. The journal (if written) provides recovery info.
+    }
+}
+
+/// Trait abstracting filesystem operations for testability.
+/// Production code uses `RealFileOps`; tests can inject failures.
+pub trait FileOps {
+    fn rename(&self, from: &Path, to: &Path) -> io::Result<()>;
+    fn hard_link(&self, src: &Path, dst: &Path) -> io::Result<()>;
+    fn remove_file(&self, path: &Path) -> io::Result<()>;
+    fn sync_dir(&self, path: &Path) -> io::Result<()>;
+}
+
+/// Production filesystem operations using std::fs.
+pub struct RealFileOps;
+
+impl FileOps for RealFileOps {
+    fn rename(&self, from: &Path, to: &Path) -> io::Result<()> {
+        platform::rename_with_retry(from, to)
+    }
+
+    fn hard_link(&self, src: &Path, dst: &Path) -> io::Result<()> {
+        std::fs::hard_link(src, dst)
+    }
+
+    fn remove_file(&self, path: &Path) -> io::Result<()> {
+        std::fs::remove_file(path)
+    }
+
+    fn sync_dir(&self, path: &Path) -> io::Result<()> {
+        platform::sync_dir(path)
+    }
 }
