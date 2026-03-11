@@ -37,6 +37,9 @@ serde_json = "1"
 # Encoding support
 encoding_rs = "0.8"
 
+[package.metadata.cargo-semver-checks.lints]
+constructible_struct_adds_field = "allow"
+
 [dev-dependencies]
 # For benchmarking
 criterion = "0.5"
