@@ -192,4 +192,211 @@ See `CONTRIBUTING.md` for commit message convention and pre‑push hooks.
 
 These will be addressed in later phases as detailed in the main PRD roadmap.
 
+---
+
+## 0.13 Section Variants (Paired & Grouped Sections)
+
+### 0.13.1 Motivation
+
+Solo sections (`ID=foo`) toggle a single block on or off. **Variants** extend this by linking multiple sections under a shared group — toggling one variant on simultaneously toggles its siblings off. The primary use case is swapping between two alternative implementations (e.g., dev vs prod config, SQLite vs Postgres backend).
+
+### 0.13.2 Marker Syntax
+
+Variants use a **colon separator** in the section ID: `group:variant`.
+
+```python
+# toggle:start ID=db:sqlite desc="SQLite backend"
+import sqlite3
+conn = sqlite3.connect("app.db")
+# toggle:end ID=db:sqlite
+
+# toggle:start ID=db:postgres desc="Postgres backend"
+# import psycopg2
+# conn = psycopg2.connect("host=localhost")
+# toggle:end ID=db:postgres
+```
+
+- The **group** is the portion before the colon (`db`).
+- The **variant** is the portion after the colon (`sqlite`, `postgres`).
+- IDs without a colon remain **solo sections** with unchanged behavior.
+- The `desc="..."` attribute remains optional and applies per-variant.
+- Variant markers follow the same `toggle:start` / `toggle:end` convention — no new keywords are added to file markers.
+
+### 0.13.3 CLI Behavior
+
+| CLI Argument | Variants Found | Behavior |
+|---|---|---|
+| `-S debug` (no colon, solo) | 1 | **Solo** — invert/force as existing behavior |
+| `-S db` (group, no variant) | 2 | **Pair flip** — swap active/inactive |
+| `-S db` (group, no variant) | 3+ | **Error** — `"group 'db' has N variants; specify one with -S db:<name>"` |
+| `-S db:postgres` | any | **Activate** — uncomment `db:postgres`, comment all other `db:*` variants |
+| `-S db --force on` | any | **Force all** — comment every `db:*` variant |
+| `-S db --force off` | any | **Force all** — uncomment every `db:*` variant |
+
+### 0.13.4 `--pair` Enforcement Flag
+
+The `--pair` flag is a **pre-execution validation guard**. When supplied, the tool scans for all variants in the targeted group and errors if the count is not exactly 2. No file modifications occur on failure.
+
+```bash
+# Succeeds — db has exactly 2 variants
+toggle -S db --pair myfile.py
+
+# Errors before any changes
+# Error: --pair: group 'db' has 3 variants, expected exactly 2
+toggle -S db --pair myfile.py
+```
+
+`--pair` is optional. Without it, a group of 2 still flips via `-S <group>`. The flag adds an explicit guardrail for cases where the pairing contract must be enforced.
+
+| Flag | Type | Description |
+|---|---|---|
+| `--pair` | `bool` | Enforce exactly 2 variants in the targeted group. Error otherwise. |
+
+### 0.13.5 Multi-File Variant Toggling
+
+Variants work across files with `-R` (recursive) or multi-path arguments. The tool collects all occurrences of the group's variants across all targeted files and applies the toggle atomically.
+
+```bash
+# Flip db pair across entire src/ tree
+toggle -S db --pair -R src/
+
+# Activate postgres everywhere
+toggle -S db:postgres -R src/
+```
+
+Cross-file consistency: all files should contain the same set of variants for a given group. Mismatches are reported as warnings (or errors with `--check`).
+
+---
+
+## 0.14 Section Scan Enhancements
+
+### 0.14.1 Variant-Aware Scan Output
+
+The existing `--scan` flag is extended to understand variant groups. Output groups variants under their parent group.
+
+**Default table output:**
+
+```
+SECTION          TYPE    STATE        LINES     DESCRIPTION
+debug            solo    commented    12-18     Debug output
+db:sqlite        pair    active       24-27     SQLite backend
+db:postgres      pair    commented    29-33     Postgres backend
+feature          solo    active       40-55     Experimental feature
+```
+
+**Recursive summary (`--scan -R src/`):**
+
+```
+SECTION          TYPE    FILES   VARIANTS  STATE
+debug            solo    3       —         mixed
+db               pair    5       2         ok
+cache            group   2       3         ok
+feature          solo    1       —         active
+```
+
+The `TYPE` column is inferred:
+- **solo** — ID has no colon
+- **pair** — group has exactly 2 variants
+- **group** — group has 3+ variants
+
+### 0.14.2 Detailed Section View (`--scan -S <id>`)
+
+When `--scan` is combined with `-S`, show detailed file references for one section or group.
+
+```bash
+toggle --scan -S db -R src/
+```
+
+```
+GROUP: db (pair, 2 variants)
+
+  db:sqlite [active]
+    src/config.py          lines 24-27
+    src/models/base.py     lines 8-14
+    tests/conftest.py      lines 3-9
+
+  db:postgres [commented]
+    src/config.py          lines 29-33
+    src/models/base.py     lines 16-22
+    tests/conftest.py      lines 11-17
+```
+
+### 0.14.3 Validation Mode (`--scan --check`)
+
+The `--check` flag performs read-only validation and reports issues.
+
+```bash
+toggle --scan --check -R src/
+```
+
+```
+OK    debug            solo    3 files
+OK    db               pair    5 files, 2 variants
+WARN  cache            group   2 files, 3 variants (src/app.py missing cache:redis)
+ERR   auth             pair    1 file, 3 variants (--pair would fail: expected 2)
+```
+
+Checks performed:
+- All start markers have matching end markers
+- `pair`-inferred groups have exactly 2 variants (warning if not)
+- Variant sets are consistent across files (same variants present in every file that references the group)
+- No duplicate section IDs within a single file
+
+When combined with `--pair`, only groups that should be pairs are checked:
+```bash
+toggle --scan --check --pair -R src/
+```
+
+### 0.14.4 JSON Output
+
+All scan modes support `--json` for machine-readable output.
+
+```bash
+toggle --scan -R src/ --json
+```
+
+```json
+{
+  "sections": [
+    {
+      "id": "debug",
+      "type": "solo",
+      "files": [
+        {"path": "src/app.py", "start": 12, "end": 18, "state": "commented", "desc": "Debug output"}
+      ]
+    },
+    {
+      "group": "db",
+      "type": "pair",
+      "variants": [
+        {
+          "id": "db:sqlite",
+          "state": "active",
+          "files": [
+            {"path": "src/config.py", "start": 24, "end": 27},
+            {"path": "src/models/base.py", "start": 8, "end": 14}
+          ]
+        },
+        {
+          "id": "db:postgres",
+          "state": "commented",
+          "files": [
+            {"path": "src/config.py", "start": 29, "end": 33},
+            {"path": "src/models/base.py", "start": 16, "end": 22}
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+### 0.14.5 New CLI Flags Summary
+
+| Flag | Type | Phase | Description |
+|---|---|---|---|
+| `--pair` | `bool` | P3 | Enforce exactly 2 variants in targeted group |
+| `--check` | `bool` | P3 | Validate section integrity without modifying files |
+| `-S` with `--scan` | `String` | P3 | Filter scan output to a specific section or group |
+
 </PRD>
