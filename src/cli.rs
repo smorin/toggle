@@ -93,5 +93,4 @@ pub struct Cli {
     /// Path to .toggleConfig TOML file
     #[arg(long = "config")]
     pub config: Option<PathBuf>,
-
 }
