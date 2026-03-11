@@ -51,10 +51,7 @@ pub fn rename_with_retry(from: &Path, to: &Path) -> io::Result<()> {
     let delays = [50, 100, 200];
     let mut last_err = None;
 
-    for (attempt, delay_ms) in std::iter::once(&0u64)
-        .chain(delays.iter())
-        .enumerate()
-    {
+    for (attempt, delay_ms) in std::iter::once(&0u64).chain(delays.iter()).enumerate() {
         if attempt > 0 {
             thread::sleep(Duration::from_millis(*delay_ms));
         }
@@ -71,9 +68,8 @@ pub fn rename_with_retry(from: &Path, to: &Path) -> io::Result<()> {
         }
     }
 
-    Err(last_err.unwrap_or_else(|| {
-        io::Error::new(io::ErrorKind::Other, "rename failed after retries")
-    }))
+    Err(last_err
+        .unwrap_or_else(|| io::Error::new(io::ErrorKind::Other, "rename failed after retries")))
 }
 
 #[cfg(not(windows))]

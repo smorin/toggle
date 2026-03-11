@@ -142,19 +142,13 @@ fn run(cli: &Cli) -> Result<()> {
 
     // ── Atomic mode: CLI validation ──
     if cli.atomic && cli.dry_run {
-        return Err(
-            UsageError("--atomic cannot be combined with --dry-run.".into()).into(),
-        );
+        return Err(UsageError("--atomic cannot be combined with --dry-run.".into()).into());
     }
     if cli.no_backup && !cli.atomic {
-        return Err(
-            UsageError("--no-backup is only valid with --atomic.".into()).into(),
-        );
+        return Err(UsageError("--no-backup is only valid with --atomic.".into()).into());
     }
     if cli.recover_forward && !cli.recover {
-        return Err(
-            UsageError("--recover-forward requires --recover.".into()).into(),
-        );
+        return Err(UsageError("--recover-forward requires --recover.".into()).into());
     }
     // Note: --atomic --stdout is not applicable (no --stdout flag exists yet)
     // Note: --atomic --in-place is not applicable (no --in-place flag exists yet)
@@ -343,14 +337,8 @@ fn run_atomic(cli: &Cli, opts: &ToggleOptions) -> Result<()> {
 
     // Register signal handlers for graceful interrupt
     let interrupted = Arc::new(AtomicBool::new(false));
-    let _ = signal_hook::flag::register(
-        signal_hook::consts::SIGTERM,
-        Arc::clone(&interrupted),
-    );
-    let _ = signal_hook::flag::register(
-        signal_hook::consts::SIGINT,
-        Arc::clone(&interrupted),
-    );
+    let _ = signal_hook::flag::register(signal_hook::consts::SIGTERM, Arc::clone(&interrupted));
+    let _ = signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&interrupted));
 
     // Determine backup behavior: --atomic implies --backup unless --no-backup
     let backup_enabled = !cli.no_backup;
@@ -397,9 +385,7 @@ fn run_atomic(cli: &Cli, opts: &ToggleOptions) -> Result<()> {
 
         batch
             .stage(path, &encoded, opts.encoding)
-            .map_err(|e| {
-                anyhow::anyhow!("Failed to stage '{}': {}", path.display(), e)
-            })?;
+            .map_err(|e| anyhow::anyhow!("Failed to stage '{}': {}", path.display(), e))?;
     }
 
     if opts.verbose {
@@ -412,7 +398,10 @@ fn run_atomic(cli: &Cli, opts: &ToggleOptions) -> Result<()> {
         .map_err(|e| anyhow::anyhow!("Atomic commit failed: {}", e))?;
 
     if opts.verbose {
-        eprintln!("Atomic commit successful. {} file(s) modified.", changes.len());
+        eprintln!(
+            "Atomic commit successful. {} file(s) modified.",
+            changes.len()
+        );
     }
 
     // Print results in normal mode

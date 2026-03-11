@@ -129,9 +129,8 @@ pub fn journal_dir(targets: &[PathBuf]) -> io::Result<PathBuf> {
 pub fn persist_journal(journal: &Journal, journal_path: &Path) -> io::Result<()> {
     let dir = journal_path.parent().unwrap_or(Path::new("."));
     let mut tmp = NamedTempFile::new_in(dir)?;
-    let json = serde_json::to_string_pretty(journal).map_err(|e| {
-        io::Error::new(io::ErrorKind::Other, format!("Failed to serialize journal: {}", e))
-    })?;
+    let json = serde_json::to_string_pretty(journal)
+        .map_err(|e| io::Error::other(format!("Failed to serialize journal: {}", e)))?;
     tmp.write_all(json.as_bytes())?;
     platform::durable_sync(tmp.as_file())?;
     tmp.persist(journal_path).map_err(|e| e.error)?;
@@ -221,28 +220,20 @@ pub fn recover_rollback(journal: &Journal, journal_path: &Path) -> io::Result<()
         .collect();
 
     if !completed.is_empty() {
-        eprintln!(
-            "  {} file(s) were renamed:",
-            completed.len()
-        );
+        eprintln!("  {} file(s) were renamed:", completed.len());
         for e in &completed {
             eprintln!("    {}", e.target_path.display());
         }
     }
     if !pending.is_empty() {
-        eprintln!(
-            "  {} file(s) were NOT renamed:",
-            pending.len()
-        );
+        eprintln!("  {} file(s) were NOT renamed:", pending.len());
         for e in &pending {
             eprintln!("    {}", e.target_path.display());
         }
     }
 
     if !journal.backup_enabled {
-        eprintln!(
-            "Error: --no-backup was used. Cannot roll back completed renames automatically."
-        );
+        eprintln!("Error: --no-backup was used. Cannot roll back completed renames automatically.");
         eprintln!("Manual intervention required for the files listed above.");
         // Still clean up temp files
         for entry in &pending {
@@ -251,8 +242,7 @@ pub fn recover_rollback(journal: &Journal, journal_path: &Path) -> io::Result<()
             }
         }
         delete_journal(journal_path)?;
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
+        return Err(io::Error::other(
             "Rollback impossible without backups. See output above for affected files.",
         ));
     }
@@ -295,10 +285,10 @@ pub fn recover_rollback(journal: &Journal, journal_path: &Path) -> io::Result<()
             eprintln!("  {}", err);
         }
         // Keep journal if rollback partially failed
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
-            format!("{} rollback error(s) occurred. Journal preserved.", errors.len()),
-        ));
+        return Err(io::Error::other(format!(
+            "{} rollback error(s) occurred. Journal preserved.",
+            errors.len()
+        )));
     }
 
     // Clean up backup files for entries that were successfully restored
@@ -408,13 +398,10 @@ pub fn recover_forward(journal: &Journal, journal_path: &Path) -> io::Result<()>
             eprintln!("  {}", err);
         }
         persist_journal(&updated_journal, journal_path)?;
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
-            format!(
-                "{} error(s) during forward recovery. Journal preserved for retry.",
-                errors.len()
-            ),
-        ));
+        return Err(io::Error::other(format!(
+            "{} error(s) during forward recovery. Journal preserved for retry.",
+            errors.len()
+        )));
     }
 
     // All renames succeeded. Clean up backups and journal.
@@ -503,10 +490,7 @@ mod tests {
         assert_eq!(loaded.status, JournalStatus::Staged);
         assert!(loaded.backup_enabled);
         assert_eq!(loaded.entries.len(), 1);
-        assert_eq!(
-            loaded.entries[0].target_path,
-            PathBuf::from("/tmp/test.py")
-        );
+        assert_eq!(loaded.entries[0].target_path, PathBuf::from("/tmp/test.py"));
         assert_eq!(loaded.entries[0].content_sha256, "abc123");
         assert!(!loaded.entries[0].rename_completed);
     }

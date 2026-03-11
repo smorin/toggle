@@ -1470,10 +1470,7 @@ fn test_scan_multiple_directories() {
 
 #[test]
 fn test_atomic_happy_path_multi_file() {
-    let dir = setup_temp_dir_with_files(&[
-        ("a.py", "hello\nworld\n"),
-        ("b.py", "foo\nbar\n"),
-    ]);
+    let dir = setup_temp_dir_with_files(&[("a.py", "hello\nworld\n"), ("b.py", "foo\nbar\n")]);
     cmd()
         .current_dir(dir.path())
         .args([dir.path().to_str().unwrap(), "-R", "-l", "1:1", "--atomic"])
@@ -1522,7 +1519,12 @@ fn test_atomic_implies_backup_by_default() {
     let dir = setup_temp_dir_with_files(&[("a.py", "hello\n")]);
     cmd()
         .current_dir(dir.path())
-        .args([dir.path().join("a.py").to_str().unwrap(), "-l", "1:1", "--atomic"])
+        .args([
+            dir.path().join("a.py").to_str().unwrap(),
+            "-l",
+            "1:1",
+            "--atomic",
+        ])
         .assert()
         .success();
     let a = fs::read_to_string(dir.path().join("a.py")).unwrap();

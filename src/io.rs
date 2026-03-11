@@ -1,8 +1,6 @@
 // File I/O operations for the Toggle CLI
 
-use crate::journal::{
-    self, Journal, JournalEntry, JOURNAL_FILENAME, LOCK_FILENAME,
-};
+use crate::journal::{self, Journal, JournalEntry, JOURNAL_FILENAME, LOCK_FILENAME};
 use crate::platform;
 use similar::TextDiff;
 use std::fs::File;
@@ -335,19 +333,10 @@ impl AtomicBatch {
 
     /// Stage a single file write: write content to a temp file in the same
     /// directory as the target, fsync it, then release the fd.
-    pub fn stage(
-        &mut self,
-        target_path: &Path,
-        content: &[u8],
-        encoding: &str,
-    ) -> io::Result<()> {
+    pub fn stage(&mut self, target_path: &Path, content: &[u8], _encoding: &str) -> io::Result<()> {
         let target_dir = target_path.parent().unwrap_or(Path::new("."));
         let mut tmp = NamedTempFile::new_in(target_dir)?;
-        let encoded = if encoding.eq_ignore_ascii_case("utf-8") {
-            content.to_vec()
-        } else {
-            content.to_vec()
-        };
+        let encoded = content.to_vec();
         tmp.write_all(&encoded)?;
         platform::durable_sync(tmp.as_file())?;
 
@@ -355,9 +344,7 @@ impl AtomicBatch {
         let original_permissions = if target_path.exists() {
             let meta = std::fs::metadata(target_path)?;
             let perms = meta.permissions();
-            tmp.as_file()
-                .set_permissions(perms.clone())
-                .ok();
+            tmp.as_file().set_permissions(perms.clone()).ok();
             Some(perms)
         } else {
             None
@@ -369,9 +356,9 @@ impl AtomicBatch {
         let temp_path_obj = tmp.into_temp_path();
         let temp_path = temp_path_obj.to_path_buf();
         // Prevent TempPath from deleting the file on drop — we manage it ourselves
-        temp_path_obj.keep().map_err(|e| {
-            io::Error::new(io::ErrorKind::Other, format!("Failed to keep temp path: {}", e))
-        })?;
+        temp_path_obj
+            .keep()
+            .map_err(|e| io::Error::other(format!("Failed to keep temp path: {}", e)))?;
 
         self.staged.push(StagedWrite {
             temp_path,
@@ -495,9 +482,7 @@ impl AtomicBatch {
                     );
                     if self.backup_enabled {
                         eprintln!("Attempting rollback...");
-                        if let Err(rb_err) =
-                            journal::recover_rollback(&j, &self.journal_path)
-                        {
+                        if let Err(rb_err) = journal::recover_rollback(&j, &self.journal_path) {
                             eprintln!("Rollback also failed: {}", rb_err);
                         }
                     } else {
