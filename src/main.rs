@@ -3,12 +3,15 @@ use clap::Parser;
 use std::collections::BTreeMap;
 use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use toggle::cli::Cli;
 use toggle::config::ToggleConfig;
 use toggle::core;
 use toggle::exit_codes::{ExitCode, UsageError};
 use toggle::io;
+use toggle::journal;
 use toggle::walk;
 
 /// Bundled options passed through the toggle pipeline.
@@ -116,6 +119,40 @@ fn classify_error(err: &anyhow::Error) -> ExitCode {
 }
 
 fn run(cli: &Cli) -> Result<()> {
+    // ── Atomic mode: startup journal check ──
+    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let journal_path = cwd.join(journal::JOURNAL_FILENAME);
+
+    // Handle --recover flag
+    if cli.recover {
+        journal::perform_recovery(&journal_path, cli.recover_forward)
+            .map_err(|e| anyhow::anyhow!("{}", e))?;
+        return Ok(());
+    }
+
+    // Check for leftover journal from a previous interrupted run
+    if journal_path.exists() && !cli.recover {
+        return Err(UsageError(
+            "A previous atomic operation was interrupted. \
+             Run with --recover to clean up, or --recover --recover-forward to complete it."
+                .into(),
+        )
+        .into());
+    }
+
+    // ── Atomic mode: CLI validation ──
+    if cli.atomic && cli.dry_run {
+        return Err(UsageError("--atomic cannot be combined with --dry-run.".into()).into());
+    }
+    if cli.no_backup && !cli.atomic {
+        return Err(UsageError("--no-backup is only valid with --atomic.".into()).into());
+    }
+    if cli.recover_forward && !cli.recover {
+        return Err(UsageError("--recover-forward requires --recover.".into()).into());
+    }
+    // Note: --atomic --stdout is not applicable (no --stdout flag exists yet)
+    // Note: --atomic --in-place is not applicable (no --in-place flag exists yet)
+
     let config = if let Some(config_path) = &cli.config {
         Some(ToggleConfig::load(config_path)?)
     } else {
@@ -226,6 +263,8 @@ fn run(cli: &Cli) -> Result<()> {
 
     if cli.list_sections {
         run_list_sections(cli, &opts)
+    } else if cli.atomic {
+        run_atomic(cli, &opts)
     } else if cli.json {
         run_json(cli, &opts)
     } else {
@@ -286,6 +325,217 @@ fn run_normal(cli: &Cli, opts: &ToggleOptions) -> Result<()> {
             .with_context(|| format!("Failed to process {}", path.display()))?;
     }
     Ok(())
+}
+
+/// Atomic multi-file mode: compute all changes, stage them, then commit atomically.
+fn run_atomic(cli: &Cli, opts: &ToggleOptions) -> Result<()> {
+    let files = collect_and_filter_files(cli, opts)?;
+
+    if files.is_empty() {
+        return Ok(());
+    }
+
+    // Register signal handlers for graceful interrupt
+    let interrupted = Arc::new(AtomicBool::new(false));
+    let _ = signal_hook::flag::register(signal_hook::consts::SIGTERM, Arc::clone(&interrupted));
+    let _ = signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&interrupted));
+
+    // Determine backup behavior: --atomic implies --backup unless --no-backup
+    let backup_enabled = !cli.no_backup;
+
+    // Compute all changes first, collecting (path, original, modified) tuples
+    let mut changes: Vec<(PathBuf, String, String)> = Vec::new();
+
+    for path in &files {
+        if interrupted.load(Ordering::Relaxed) {
+            anyhow::bail!("Interrupted before staging. No files were modified.");
+        }
+
+        // Process each file to compute the modification (without writing)
+        let original = io::read_file_encoded(path, opts.encoding)
+            .with_context(|| format!("Failed to read {}", path.display()))?;
+
+        let modified = compute_file_changes(path, cli, opts, &original)
+            .with_context(|| format!("Failed to compute changes for {}", path.display()))?;
+
+        if original != modified {
+            changes.push((path.clone(), original, modified));
+        }
+    }
+
+    if changes.is_empty() {
+        if opts.verbose {
+            eprintln!("No changes to apply.");
+        }
+        return Ok(());
+    }
+
+    if opts.verbose {
+        eprintln!("Staging {} file(s) in atomic mode...", changes.len());
+    }
+
+    // Create atomic batch and stage all writes
+    let target_paths: Vec<PathBuf> = changes.iter().map(|(p, _, _)| p.clone()).collect();
+    let mut batch = io::AtomicBatch::new(&target_paths, backup_enabled, Arc::clone(&interrupted))
+        .map_err(|e| anyhow::anyhow!("Failed to initialize atomic batch: {}", e))?;
+
+    for (path, _original, modified) in &changes {
+        let encoded = io::encode_for_atomic(modified, opts.encoding)
+            .with_context(|| format!("Failed to encode content for {}", path.display()))?;
+
+        batch
+            .stage(path, &encoded, opts.encoding)
+            .map_err(|e| anyhow::anyhow!("Failed to stage '{}': {}", path.display(), e))?;
+    }
+
+    if opts.verbose {
+        eprintln!("All files staged. Committing...");
+    }
+
+    // Execute the two-phase commit
+    batch
+        .commit()
+        .map_err(|e| anyhow::anyhow!("Atomic commit failed: {}", e))?;
+
+    if opts.verbose {
+        eprintln!(
+            "Atomic commit successful. {} file(s) modified.",
+            changes.len()
+        );
+    }
+
+    // Print results in normal mode
+    if !opts.json {
+        for (path, original, modified) in &changes {
+            let lines_changed = count_changed_lines(original, modified);
+            eprintln!(
+                "Modified {} ({} line(s) changed)",
+                path.display(),
+                lines_changed
+            );
+        }
+    }
+
+    Ok(())
+}
+
+/// Compute the modified content for a file without writing it.
+/// This is the "dry" version of process_file used by atomic mode.
+fn compute_file_changes(
+    path: &Path,
+    cli: &Cli,
+    opts: &ToggleOptions,
+    original: &str,
+) -> Result<String> {
+    // --strict-ext: reject non-.py files
+    if cli.strict_ext {
+        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+        if ext != "py" {
+            return Err(UsageError(format!(
+                "File '{}' is not a .py file (rejected by --strict-ext)",
+                path.display()
+            ))
+            .into());
+        }
+    }
+
+    let mut content = original.to_string();
+
+    if !cli.lines.is_empty() {
+        content = compute_line_range_changes(path, &cli.lines, opts, &content)?;
+    }
+
+    for section in &cli.sections {
+        content = compute_section_changes(path, section, opts, &content)?;
+    }
+
+    Ok(content)
+}
+
+/// Compute line-range toggle changes without writing.
+fn compute_line_range_changes(
+    path: &Path,
+    line_range_specs: &[String],
+    opts: &ToggleOptions,
+    content: &str,
+) -> Result<String> {
+    let comment_style = resolve_comment_style(path, opts)?;
+    let line_count = content.lines().count();
+
+    let mut ranges = Vec::new();
+    for spec in line_range_specs {
+        let (start_line, end_line) = core::parse_line_range(spec)?;
+        if start_line > line_count {
+            return Err(UsageError(format!(
+                "Start line {} is out of range (file has {} lines)",
+                start_line, line_count
+            ))
+            .into());
+        }
+        ranges.push(core::LineRange::new(start_line, end_line));
+    }
+
+    if opts.to_end {
+        if let Some(last) = ranges.last_mut() {
+            last.end = line_count;
+        }
+    }
+
+    for range in &ranges {
+        if range.end > line_count {
+            return Err(UsageError(format!(
+                "End line {} is out of range (file has {} lines)",
+                range.end, line_count
+            ))
+            .into());
+        }
+    }
+
+    let merged = core::merge_ranges(&ranges);
+    let force_mode = opts.force.as_deref();
+    let toggled = if opts.mode == "multi" {
+        let (ms, me) = match (
+            &comment_style.multi_line_start,
+            &comment_style.multi_line_end,
+        ) {
+            (Some(s), Some(e)) => (s.as_str(), e.as_str()),
+            _ => {
+                return Err(UsageError(format!(
+                    "Multi-line comments not supported for {}",
+                    path.display()
+                ))
+                .into());
+            }
+        };
+        core::toggle_comments_multi(content, &merged, force_mode, ms, me)
+    } else {
+        core::toggle_comments_with_marker(content, &merged, force_mode, &comment_style.single_line)
+    };
+
+    Ok(io::normalize_eol(&toggled, opts.eol))
+}
+
+/// Compute section toggle changes without writing.
+fn compute_section_changes(
+    path: &Path,
+    section_id: &str,
+    opts: &ToggleOptions,
+    content: &str,
+) -> Result<String> {
+    let comment_style = resolve_comment_style(path, opts)?;
+    let mut lines: Vec<String> = content.lines().map(String::from).collect();
+
+    let result = core::find_and_toggle_section(&mut lines, section_id, opts.force, &comment_style)?;
+
+    if result.modified {
+        let mut joined = lines.join("\n");
+        if content.ends_with('\n') {
+            joined.push('\n');
+        }
+        Ok(io::normalize_eol(&joined, opts.eol))
+    } else {
+        Ok(content.to_string())
+    }
 }
 
 fn run_json(cli: &Cli, opts: &ToggleOptions) -> Result<()> {

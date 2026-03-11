@@ -1465,3 +1465,285 @@ fn test_scan_multiple_directories() {
     assert!(stdout.contains("alpha"), "should find alpha section");
     assert!(stdout.contains("beta"), "should find beta section");
 }
+
+// ── Atomic multi-file mode (Phase 4) ──
+
+#[test]
+fn test_atomic_happy_path_multi_file() {
+    let dir = setup_temp_dir_with_files(&[("a.py", "hello\nworld\n"), ("b.py", "foo\nbar\n")]);
+    cmd()
+        .current_dir(dir.path())
+        .args([dir.path().to_str().unwrap(), "-R", "-l", "1:1", "--atomic"])
+        .assert()
+        .success();
+    let a = fs::read_to_string(dir.path().join("a.py")).unwrap();
+    let b = fs::read_to_string(dir.path().join("b.py")).unwrap();
+    assert_eq!(a, "# hello\nworld\n", "a.py should be toggled");
+    assert_eq!(b, "# foo\nbar\n", "b.py should be toggled");
+    // No journal or lock files should remain
+    assert!(
+        !dir.path().join(".toggle-atomic.journal").exists(),
+        "journal should be cleaned up"
+    );
+    assert!(
+        !dir.path().join(".toggle-atomic.lock").exists(),
+        "lock should be cleaned up"
+    );
+}
+
+#[test]
+fn test_atomic_no_changes_does_nothing() {
+    let dir = setup_temp_dir_with_files(&[("a.py", "# hello\n")]);
+    cmd()
+        .current_dir(dir.path())
+        .args([
+            dir.path().join("a.py").to_str().unwrap(),
+            "-l",
+            "1:1",
+            "-f",
+            "on",
+            "--atomic",
+        ])
+        .assert()
+        .success();
+    // Already commented, force on should still produce "# hello"
+    let a = fs::read_to_string(dir.path().join("a.py")).unwrap();
+    assert_eq!(a, "# hello\n");
+}
+
+#[test]
+fn test_atomic_implies_backup_by_default() {
+    // This test verifies that --atomic creates backups (hard links) and removes
+    // them on success. We verify indirectly: after a successful --atomic run,
+    // no .toggle-atomic-backup files remain.
+    let dir = setup_temp_dir_with_files(&[("a.py", "hello\n")]);
+    cmd()
+        .current_dir(dir.path())
+        .args([
+            dir.path().join("a.py").to_str().unwrap(),
+            "-l",
+            "1:1",
+            "--atomic",
+        ])
+        .assert()
+        .success();
+    let a = fs::read_to_string(dir.path().join("a.py")).unwrap();
+    assert_eq!(a, "# hello\n");
+    // Backup should have been cleaned up
+    assert!(!dir.path().join("a.py.toggle-atomic-backup").exists());
+}
+
+#[test]
+fn test_atomic_no_backup_flag() {
+    let dir = setup_temp_dir_with_files(&[("a.py", "hello\n")]);
+    let output = cmd()
+        .current_dir(dir.path())
+        .args([
+            dir.path().join("a.py").to_str().unwrap(),
+            "-l",
+            "1:1",
+            "--atomic",
+            "--no-backup",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("without backups"),
+        "should warn about no backups"
+    );
+}
+
+#[test]
+fn test_atomic_with_dry_run_errors() {
+    let dir = setup_temp_dir_with_files(&[("a.py", "hello\n")]);
+    cmd()
+        .current_dir(dir.path())
+        .args([
+            dir.path().join("a.py").to_str().unwrap(),
+            "-l",
+            "1:1",
+            "--atomic",
+            "--dry-run",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains(
+            "--atomic cannot be combined with --dry-run",
+        ));
+}
+
+#[test]
+fn test_no_backup_without_atomic_errors() {
+    let dir = setup_temp_dir_with_files(&[("a.py", "hello\n")]);
+    cmd()
+        .current_dir(dir.path())
+        .args([
+            dir.path().join("a.py").to_str().unwrap(),
+            "-l",
+            "1:1",
+            "--no-backup",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains(
+            "--no-backup is only valid with --atomic",
+        ));
+}
+
+#[test]
+fn test_recover_forward_without_recover_errors() {
+    let dir = setup_temp_dir_with_files(&[("a.py", "hello\n")]);
+    cmd()
+        .current_dir(dir.path())
+        .args([
+            dir.path().join("a.py").to_str().unwrap(),
+            "-l",
+            "1:1",
+            "--recover-forward",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains(
+            "--recover-forward requires --recover",
+        ));
+}
+
+#[test]
+fn test_atomic_section_toggle_multi_file() {
+    let dir = setup_temp_dir_with_files(&[
+        (
+            "a.py",
+            "before\n# toggle:start ID=feat1\nhello\n# toggle:end ID=feat1\nafter\n",
+        ),
+        (
+            "b.py",
+            "top\n# toggle:start ID=feat1\nworld\n# toggle:end ID=feat1\nbottom\n",
+        ),
+    ]);
+    cmd()
+        .current_dir(dir.path())
+        .args([
+            dir.path().to_str().unwrap(),
+            "-R",
+            "-S",
+            "feat1",
+            "-f",
+            "on",
+            "--atomic",
+        ])
+        .assert()
+        .success();
+    let a = fs::read_to_string(dir.path().join("a.py")).unwrap();
+    let b = fs::read_to_string(dir.path().join("b.py")).unwrap();
+    assert!(a.contains("# hello"), "a.py should be commented");
+    assert!(b.contains("# world"), "b.py should be commented");
+}
+
+#[test]
+fn test_recover_no_journal_is_noop() {
+    let dir = setup_temp_dir_with_files(&[("a.py", "hello\n")]);
+    let output = cmd()
+        .current_dir(dir.path())
+        .args([dir.path().join("a.py").to_str().unwrap(), "--recover"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(stderr.contains("No journal found"));
+}
+
+#[test]
+fn test_recover_from_staged_journal() {
+    // Manually create a journal in Staged state with temp files
+    let dir = TempDir::new().unwrap();
+    let target = dir.path().join("target.py");
+    let temp = dir.path().join("temp_staged_file");
+    fs::write(&target, "original\n").unwrap();
+    fs::write(&temp, "modified\n").unwrap();
+
+    let journal = toggle::journal::Journal::new(
+        vec![toggle::journal::JournalEntry {
+            target_path: target.clone(),
+            temp_path: temp.clone(),
+            backup_path: None,
+            content_sha256: "xxx".to_string(),
+            rename_completed: false,
+        }],
+        false,
+    );
+    let journal_path = dir.path().join(".toggle-atomic.journal");
+    toggle::journal::persist_journal(&journal, &journal_path).unwrap();
+
+    // Run --recover
+    cmd()
+        .current_dir(dir.path())
+        .args([target.to_str().unwrap(), "--recover"])
+        .assert()
+        .success();
+
+    // Temp file should be deleted, original untouched
+    assert!(!temp.exists(), "temp file should be cleaned up");
+    assert!(!journal_path.exists(), "journal should be deleted");
+    assert_eq!(
+        fs::read_to_string(&target).unwrap(),
+        "original\n",
+        "original should be untouched"
+    );
+}
+
+#[test]
+fn test_journal_blocks_new_operations() {
+    // Create a leftover journal
+    let dir = TempDir::new().unwrap();
+    let target = dir.path().join("target.py");
+    fs::write(&target, "hello\n").unwrap();
+    let journal_path = dir.path().join(".toggle-atomic.journal");
+    fs::write(&journal_path, "{}").unwrap(); // minimal journal
+
+    cmd()
+        .current_dir(dir.path())
+        .args([target.to_str().unwrap(), "-l", "1:1"])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains("previous atomic operation"));
+}
+
+#[test]
+fn test_atomic_with_verbose() {
+    let dir = setup_temp_dir_with_files(&[("a.py", "hello\n")]);
+    let output = cmd()
+        .current_dir(dir.path())
+        .args([
+            dir.path().join("a.py").to_str().unwrap(),
+            "-l",
+            "1:1",
+            "--atomic",
+            "-v",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(stderr.contains("Staging"));
+    assert!(stderr.contains("Committing"));
+    assert!(stderr.contains("successful"));
+}
+
+#[test]
+fn test_atomic_single_file() {
+    let dir = setup_temp_dir_with_files(&[("a.py", "x\ny\nz\n")]);
+    cmd()
+        .current_dir(dir.path())
+        .args([
+            dir.path().join("a.py").to_str().unwrap(),
+            "-l",
+            "2:2",
+            "--atomic",
+        ])
+        .assert()
+        .success();
+    let a = fs::read_to_string(dir.path().join("a.py")).unwrap();
+    assert_eq!(a, "x\n# y\nz\n");
+}

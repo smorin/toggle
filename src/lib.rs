@@ -5,4 +5,6 @@ pub mod config;
 pub mod core;
 pub mod exit_codes;
 pub mod io;
+pub mod journal;
+pub mod platform;
 pub mod walk;

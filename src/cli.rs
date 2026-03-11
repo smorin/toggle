@@ -93,4 +93,23 @@ pub struct Cli {
     /// Path to .toggleConfig TOML file
     #[arg(long = "config")]
     pub config: Option<PathBuf>,
+
+    /// Enable atomic multi-file mode: all files succeed or none are modified.
+    /// Implies --backup unless --no-backup is explicitly passed.
+    #[arg(long = "atomic")]
+    pub atomic: bool,
+
+    /// Disable backup creation in atomic mode. Only valid with --atomic.
+    /// WARNING: Without backups, rollback is not possible if the rename phase fails.
+    #[arg(long = "no-backup")]
+    pub no_backup: bool,
+
+    /// Recover from an interrupted atomic operation. Default: rollback.
+    #[arg(long = "recover")]
+    pub recover: bool,
+
+    /// Complete an interrupted atomic commit instead of rolling back.
+    /// Must be combined with --recover.
+    #[arg(long = "recover-forward")]
+    pub recover_forward: bool,
 }
