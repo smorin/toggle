@@ -12,6 +12,9 @@ pub struct WalkOptions {
     pub skip_hidden: bool,
     pub max_depth: Option<usize>,
     pub verbose: bool,
+    /// When true, only collect files with extensions in `supported_extensions()`.
+    /// When false, collect all files (callers handle extension filtering themselves).
+    pub skip_unsupported_extensions: bool,
 }
 
 impl Default for WalkOptions {
@@ -20,6 +23,7 @@ impl Default for WalkOptions {
             skip_hidden: true,
             max_depth: None,
             verbose: false,
+            skip_unsupported_extensions: true,
         }
     }
 }
@@ -75,7 +79,7 @@ pub fn collect_files(
         } else if path.is_dir() {
             if !recursive {
                 return Err(UsageError(format!(
-                    "'{}' is a directory; use --recursive (-R) to process directories",
+                    "'{}' is a directory; use -R/--recursive to process directories",
                     path.display()
                 ))
                 .into());
@@ -111,7 +115,9 @@ fn walk_directory(dir: &Path, opts: &WalkOptions, files: &mut Vec<PathBuf>) -> R
     }) {
         match entry {
             Ok(entry) => {
-                if entry.file_type().is_file() && is_supported_file(entry.path()) {
+                if entry.file_type().is_file()
+                    && (!opts.skip_unsupported_extensions || is_supported_file(entry.path()))
+                {
                     files.push(entry.into_path());
                 }
             }

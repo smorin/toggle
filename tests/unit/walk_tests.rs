@@ -136,6 +136,7 @@ fn test_collect_files_max_depth() {
         skip_hidden: true,
         max_depth: Some(2), // root + 1 level
         verbose: false,
+        skip_unsupported_extensions: true,
     };
     let files = collect_files(&[dir.path().to_path_buf()], true, &opts).unwrap();
     assert!(files.iter().any(|f| f.ends_with("top.py")));

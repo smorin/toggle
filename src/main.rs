@@ -3,7 +3,6 @@ use clap::Parser;
 use std::collections::BTreeMap;
 use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
-use walkdir::WalkDir;
 
 use toggle::cli::Cli;
 use toggle::config::ToggleConfig;
@@ -28,7 +27,6 @@ struct ToggleOptions<'a> {
     to_end: bool,
     comment_style_override: &'a [String],
     interactive: bool,
-    recursive: bool,
 }
 
 /// Result of processing a single toggle operation.
@@ -224,7 +222,6 @@ fn run(cli: &Cli) -> Result<()> {
         to_end: cli.to_end,
         comment_style_override: &cli.comment_style,
         interactive: cli.interactive,
-        recursive: cli.recursive,
     };
 
     if cli.list_sections {
@@ -234,38 +231,6 @@ fn run(cli: &Cli) -> Result<()> {
     } else {
         run_normal(cli, &opts)
     }
-}
-
-/// Expand CLI paths into individual files, walking directories when recursive is set.
-fn collect_files(paths: &[PathBuf], recursive: bool) -> Vec<PathBuf> {
-    if !recursive {
-        return paths.to_vec();
-    }
-    let mut files = Vec::new();
-    for path in paths {
-        if path.is_file() {
-            files.push(path.clone());
-        } else if path.is_dir() {
-            for entry in WalkDir::new(path)
-                .follow_links(false)
-                .into_iter()
-                .filter_entry(|e| {
-                    // Always include the root directory (depth 0), only filter
-                    // hidden entries in subdirectories
-                    e.depth() == 0 || !e.file_name().to_str().is_some_and(|s| s.starts_with('.'))
-                })
-                .filter_map(|e| e.ok())
-            {
-                if entry.file_type().is_file() {
-                    files.push(entry.into_path());
-                }
-            }
-        } else {
-            // Non-existent or special paths: include as-is to let process_path report errors
-            files.push(path.clone());
-        }
-    }
-    files
 }
 
 /// Check if a file has any sections matching the requested IDs.
@@ -282,52 +247,54 @@ fn file_has_matching_sections(path: &Path, section_ids: &[String], encoding: &st
     found.iter().any(|s| section_ids.contains(&s.id))
 }
 
-fn run_normal(cli: &Cli, opts: &ToggleOptions) -> Result<()> {
-    let files = collect_files(&cli.paths, cli.recursive);
+/// Collect files from CLI paths and apply recursive-mode filters
+/// (section matching + extension support).
+fn collect_and_filter_files(cli: &Cli, opts: &ToggleOptions) -> Result<Vec<PathBuf>> {
+    let walk_opts = walk::WalkOptions {
+        verbose: opts.verbose,
+        skip_unsupported_extensions: false,
+        ..walk::WalkOptions::default()
+    };
+    let files = walk::collect_files(&cli.paths, cli.recursive, &walk_opts)?;
 
+    Ok(files
+        .into_iter()
+        .filter(|path| {
+            // In recursive mode with sections, skip files without matching sections
+            if cli.recursive
+                && !cli.sections.is_empty()
+                && !file_has_matching_sections(path, &cli.sections, opts.encoding)
+            {
+                return false;
+            }
+            // In recursive mode, silently skip files with unsupported extensions
+            if cli.recursive
+                && opts.comment_style_override.is_empty()
+                && core::get_comment_style(path, opts.mode, opts.config).is_err()
+            {
+                return false;
+            }
+            true
+        })
+        .collect())
+}
+
+fn run_normal(cli: &Cli, opts: &ToggleOptions) -> Result<()> {
+    let files = collect_and_filter_files(cli, opts)?;
     for path in &files {
-        // In recursive mode with sections, skip files that don't contain matching sections
-        if cli.recursive
-            && !cli.sections.is_empty()
-            && !file_has_matching_sections(path, &cli.sections, opts.encoding)
-        {
-            continue;
-        }
-        // In recursive mode, silently skip files with unsupported extensions
-        if cli.recursive
-            && opts.comment_style_override.is_empty()
-            && core::get_comment_style(path, opts.mode, opts.config).is_err()
-        {
-            continue;
-        }
-        process_path(path, cli, opts)
+        process_file(path, cli, opts)
             .with_context(|| format!("Failed to process {}", path.display()))?;
     }
     Ok(())
 }
 
 fn run_json(cli: &Cli, opts: &ToggleOptions) -> Result<()> {
-    let files = collect_files(&cli.paths, cli.recursive);
+    let files = collect_and_filter_files(cli, opts)?;
     let mut results: Vec<ToggleResult> = Vec::new();
     let mut had_error = false;
 
     for path in &files {
-        // In recursive mode with sections, skip files that don't contain matching sections
-        if cli.recursive
-            && !cli.sections.is_empty()
-            && !file_has_matching_sections(path, &cli.sections, opts.encoding)
-        {
-            continue;
-        }
-        // In recursive mode, silently skip files with unsupported extensions
-        if cli.recursive
-            && opts.comment_style_override.is_empty()
-            && core::get_comment_style(path, opts.mode, opts.config).is_err()
-        {
-            continue;
-        }
-
-        match process_path(path, cli, opts) {
+        match process_file(path, cli, opts) {
             Ok(proc_results) => {
                 for pr in proc_results {
                     results.push(ToggleResult {
@@ -373,7 +340,12 @@ fn run_json(cli: &Cli, opts: &ToggleOptions) -> Result<()> {
 type SectionAggregation = (Option<String>, Vec<(String, usize, usize)>);
 
 fn run_list_sections(cli: &Cli, opts: &ToggleOptions) -> Result<()> {
-    let files = collect_files(&cli.paths, cli.recursive);
+    let walk_opts = walk::WalkOptions {
+        verbose: opts.verbose,
+        skip_unsupported_extensions: false,
+        ..walk::WalkOptions::default()
+    };
+    let files = walk::collect_files(&cli.paths, cli.recursive, &walk_opts)?;
 
     // Aggregate sections grouped by ID, preserving insertion order with BTreeMap
     let mut sections_by_id: BTreeMap<String, SectionAggregation> = BTreeMap::new();
@@ -434,44 +406,6 @@ fn run_list_sections(cli: &Cli, opts: &ToggleOptions) -> Result<()> {
     }
 
     Ok(())
-}
-
-fn process_path(path: &Path, cli: &Cli, opts: &ToggleOptions) -> Result<Vec<ProcessResult>> {
-    // If path is a directory, handle recursive traversal
-    if path.is_dir() {
-        if !opts.recursive {
-            return Err(UsageError(format!(
-                "'{}' is a directory; use -R/--recursive to process directories",
-                path.display()
-            ))
-            .into());
-        }
-        let mut results = Vec::new();
-        for entry in WalkDir::new(path)
-            .into_iter()
-            .filter_map(|e| e.ok())
-            .filter(|e| e.file_type().is_file())
-        {
-            let file_path = entry.path();
-            // Skip files with unsupported extensions (unless --comment-style is set)
-            if opts.comment_style_override.is_empty()
-                && core::get_comment_style(file_path, opts.mode, opts.config).is_err()
-            {
-                continue;
-            }
-            match process_file(file_path, cli, opts) {
-                Ok(mut file_results) => results.append(&mut file_results),
-                Err(e) => {
-                    if opts.verbose {
-                        eprintln!("  Skipping {}: {}", file_path.display(), e);
-                    }
-                }
-            }
-        }
-        return Ok(results);
-    }
-
-    process_file(path, cli, opts)
 }
 
 fn process_file(path: &Path, cli: &Cli, opts: &ToggleOptions) -> Result<Vec<ProcessResult>> {

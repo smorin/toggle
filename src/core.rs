@@ -1,7 +1,6 @@
 // Toggle algorithm implementation
 
 use anyhow::Result;
-use std::collections::HashMap;
 use std::path::Path;
 
 use crate::config::ToggleConfig;
@@ -564,69 +563,44 @@ pub fn get_comment_style(
         }
     }
 
-    let mut comment_styles = HashMap::new();
-    // Hash-style comments (no multi-line)
-    for ext in &[
-        "py", "sh", "rb", "yaml", "yml", "toml", "r", "ex", "exs", "pl", "pm",
-    ] {
-        comment_styles.insert(
-            *ext,
-            CommentStyle {
+    match extension {
+        // Hash-style comments (no multi-line)
+        "py" | "sh" | "rb" | "yaml" | "yml" | "toml" | "r" | "ex" | "exs" | "pl" | "pm" => {
+            Ok(CommentStyle {
                 single_line: "#".to_string(),
                 multi_line_start: None,
                 multi_line_end: None,
-            },
-        );
-    }
-    // Slash-style comments with /* */ multi-line
-    for ext in &[
-        "js", "jsx", "ts", "tsx", "rs", "java", "c", "cpp", "go", "swift", "kt", "scala", "php",
-    ] {
-        comment_styles.insert(
-            *ext,
-            CommentStyle {
-                single_line: "//".to_string(),
-                multi_line_start: Some("/*".to_string()),
-                multi_line_end: Some("*/".to_string()),
-            },
-        );
-    }
-    // Dash-style comments
-    comment_styles.insert(
-        "lua",
-        CommentStyle {
+            })
+        }
+        // Slash-style comments with /* */ multi-line
+        "js" | "jsx" | "ts" | "tsx" | "rs" | "java" | "c" | "cpp" | "go" | "swift" | "kt"
+        | "scala" | "php" => Ok(CommentStyle {
+            single_line: "//".to_string(),
+            multi_line_start: Some("/*".to_string()),
+            multi_line_end: Some("*/".to_string()),
+        }),
+        // Dash-style comments
+        "lua" => Ok(CommentStyle {
             single_line: "--".to_string(),
             multi_line_start: Some("--[[".to_string()),
             multi_line_end: Some("]]".to_string()),
-        },
-    );
-    comment_styles.insert(
-        "hs",
-        CommentStyle {
+        }),
+        "hs" => Ok(CommentStyle {
             single_line: "--".to_string(),
             multi_line_start: Some("{-".to_string()),
             multi_line_end: Some("-}".to_string()),
-        },
-    );
-    comment_styles.insert(
-        "sql",
-        CommentStyle {
+        }),
+        "sql" => Ok(CommentStyle {
             single_line: "--".to_string(),
             multi_line_start: Some("/*".to_string()),
             multi_line_end: Some("*/".to_string()),
-        },
-    );
-
-    comment_styles
-        .get(extension)
-        .cloned()
-        .ok_or_else(|| {
-            UsageError(format!(
-                "Unsupported file extension: .{}; use --comment-style or --config with a [global] single_line_delimiter",
-                extension
-            ))
-            .into()
-        })
+        }),
+        _ => Err(UsageError(format!(
+            "Unsupported file extension: .{}; use --comment-style or --config with a [global] single_line_delimiter",
+            extension
+        ))
+        .into()),
+    }
 }
 
 /// Find section markers and toggle the content between them.
