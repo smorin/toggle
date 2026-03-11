@@ -1,6 +1,7 @@
+use std::path::Path;
 use toggle::core::{
-    find_and_toggle_section, get_comment_style, merge_ranges, parse_line_range, toggle_comments,
-    CommentStyle, LineRange,
+    find_and_toggle_section, get_comment_style, merge_ranges, parse_line_range, scan_sections,
+    supported_extensions, toggle_comments, CommentStyle, LineRange,
 };
 
 // ── parse_line_range ──
@@ -246,4 +247,97 @@ fn test_section_toggle_preserves_trailing_empty_lines() {
     assert_eq!(lines[1], "# hello");
     assert_eq!(lines[2], "");
     assert_eq!(lines[3], "# world");
+}
+
+// ── supported_extensions ──
+
+#[test]
+fn test_supported_extensions_nonempty() {
+    let exts = supported_extensions();
+    assert!(exts.len() > 10);
+    assert!(exts.contains(&"py"));
+    assert!(exts.contains(&"rs"));
+    assert!(exts.contains(&"js"));
+}
+
+// ── scan_sections ──
+
+#[test]
+fn test_scan_sections_finds_single_section() {
+    let content =
+        "# toggle:start ID=debug desc=\"Debug output\"\n# print('debug')\n# toggle:end ID=debug\n";
+    let path = Path::new("test.py");
+    let sections = scan_sections(path, content);
+    assert_eq!(sections.len(), 1);
+    assert_eq!(sections[0].id, "debug");
+    assert_eq!(sections[0].start_line, 1);
+    assert_eq!(sections[0].end_line, Some(3));
+    assert_eq!(sections[0].description.as_deref(), Some("Debug output"));
+    assert_eq!(sections[0].state, "commented");
+}
+
+#[test]
+fn test_scan_sections_finds_multiple_sections() {
+    let content = "\
+# toggle:start ID=alpha
+# commented_line
+# toggle:end ID=alpha
+# toggle:start ID=beta
+active_line
+# toggle:end ID=beta
+";
+    let path = Path::new("test.py");
+    let sections = scan_sections(path, content);
+    assert_eq!(sections.len(), 2);
+    assert_eq!(sections[0].id, "alpha");
+    assert_eq!(sections[0].state, "commented");
+    assert_eq!(sections[1].id, "beta");
+    assert_eq!(sections[1].state, "uncommented");
+}
+
+#[test]
+fn test_scan_sections_detects_mixed_state() {
+    let content = "\
+# toggle:start ID=mix
+# commented
+uncommented
+# toggle:end ID=mix
+";
+    let path = Path::new("test.py");
+    let sections = scan_sections(path, content);
+    assert_eq!(sections[0].state, "mixed");
+}
+
+#[test]
+fn test_scan_sections_unclosed_section() {
+    let content = "# toggle:start ID=orphan\nsome code\n";
+    let path = Path::new("test.py");
+    let sections = scan_sections(path, content);
+    assert_eq!(sections.len(), 1);
+    assert_eq!(sections[0].id, "orphan");
+    assert!(sections[0].end_line.is_none());
+    assert_eq!(sections[0].state, "unknown");
+}
+
+#[test]
+fn test_scan_sections_empty_section() {
+    let content = "# toggle:start ID=empty\n# toggle:end ID=empty\n";
+    let path = Path::new("test.py");
+    let sections = scan_sections(path, content);
+    assert_eq!(sections.len(), 1);
+    assert_eq!(sections[0].state, "empty");
+}
+
+#[test]
+fn test_scan_sections_javascript_comment_style() {
+    let content = "\
+// toggle:start ID=feature desc=\"JS feature\"
+// console.log('debug');
+// toggle:end ID=feature
+";
+    let path = Path::new("app.js");
+    let sections = scan_sections(path, content);
+    assert_eq!(sections.len(), 1);
+    assert_eq!(sections[0].id, "feature");
+    assert_eq!(sections[0].state, "commented");
 }

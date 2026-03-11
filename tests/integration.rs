@@ -1327,3 +1327,141 @@ fn test_section_desc_in_verbose_output() {
         "verbose should show desc"
     );
 }
+
+// ── Scan (--scan) ──
+
+#[test]
+fn test_scan_discovers_sections() {
+    let dir = TempDir::new().unwrap();
+    let content = "\
+# toggle:start ID=debug desc=\"Debug output\"
+# print('debug')
+# toggle:end ID=debug
+
+# toggle:start ID=feature
+print('feature')
+# toggle:end ID=feature
+";
+    fs::write(dir.path().join("app.py"), content).unwrap();
+
+    let output = cmd()
+        .args([dir.path().to_str().unwrap(), "--scan"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("debug"), "should list debug section");
+    assert!(stdout.contains("feature"), "should list feature section");
+    assert!(stdout.contains("commented"), "should show commented state");
+    assert!(
+        stdout.contains("uncommented"),
+        "should show uncommented state"
+    );
+}
+
+#[test]
+fn test_scan_json_output() {
+    let dir = TempDir::new().unwrap();
+    let content = "# toggle:start ID=test desc=\"A test\"\n# code\n# toggle:end ID=test\n";
+    fs::write(dir.path().join("file.py"), content).unwrap();
+
+    let output = cmd()
+        .args([dir.path().to_str().unwrap(), "--scan", "--json"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+
+    let json: Vec<Value> = serde_json::from_slice(&output.stdout)
+        .expect("scan --json should produce valid JSON array");
+    assert_eq!(json.len(), 1);
+    assert_eq!(json[0]["id"], "test");
+    assert_eq!(json[0]["description"], "A test");
+    assert_eq!(json[0]["state"], "commented");
+    assert!(json[0]["start_line"].is_number());
+    assert!(json[0]["end_line"].is_number());
+}
+
+#[test]
+fn test_scan_empty_directory() {
+    let dir = TempDir::new().unwrap();
+    fs::write(dir.path().join("empty.py"), "print('no sections')\n").unwrap();
+
+    let output = cmd()
+        .args([dir.path().to_str().unwrap(), "--scan"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("No toggle sections found"));
+}
+
+#[test]
+fn test_scan_with_line_flag_errors() {
+    let dir = TempDir::new().unwrap();
+    fs::write(dir.path().join("test.py"), "x\n").unwrap();
+
+    cmd()
+        .args([dir.path().to_str().unwrap(), "--scan", "-l", "1:2"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--scan cannot be combined"));
+}
+
+#[test]
+fn test_scan_with_section_flag_errors() {
+    let dir = TempDir::new().unwrap();
+    fs::write(dir.path().join("test.py"), "x\n").unwrap();
+
+    cmd()
+        .args([dir.path().to_str().unwrap(), "--scan", "-S", "foo"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--scan cannot be combined"));
+}
+
+#[test]
+fn test_scan_does_not_modify_files() {
+    let dir = TempDir::new().unwrap();
+    let content = "# toggle:start ID=sec\ncode\n# toggle:end ID=sec\n";
+    let file = dir.path().join("test.py");
+    fs::write(&file, content).unwrap();
+
+    cmd()
+        .args([dir.path().to_str().unwrap(), "--scan"])
+        .assert()
+        .success();
+
+    let after = fs::read_to_string(&file).unwrap();
+    assert_eq!(after, content, "scan should not modify files");
+}
+
+#[test]
+fn test_scan_multiple_directories() {
+    let dir = TempDir::new().unwrap();
+    let pkg_a = dir.path().join("pkg_a");
+    let pkg_b = dir.path().join("pkg_b");
+    fs::create_dir(&pkg_a).unwrap();
+    fs::create_dir(&pkg_b).unwrap();
+
+    fs::write(
+        pkg_a.join("mod.py"),
+        "# toggle:start ID=alpha\n# x\n# toggle:end ID=alpha\n",
+    )
+    .unwrap();
+    fs::write(
+        pkg_b.join("mod.rs"),
+        "// toggle:start ID=beta\n// y\n// toggle:end ID=beta\n",
+    )
+    .unwrap();
+
+    let output = cmd()
+        .args([pkg_a.to_str().unwrap(), pkg_b.to_str().unwrap(), "--scan"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("alpha"), "should find alpha section");
+    assert!(stdout.contains("beta"), "should find beta section");
+}

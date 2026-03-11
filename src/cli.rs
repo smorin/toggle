@@ -86,6 +86,10 @@ pub struct Cli {
     #[arg(long = "to-end")]
     pub to_end: bool,
 
+    /// Scan for section IDs without modifying files
+    #[arg(long = "scan")]
+    pub scan: bool,
+
     /// Path to .toggleConfig TOML file
     #[arg(long = "config")]
     pub config: Option<PathBuf>,

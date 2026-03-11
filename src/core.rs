@@ -7,7 +7,15 @@ use std::path::Path;
 use crate::config::ToggleConfig;
 use crate::exit_codes::UsageError;
 
-/// A discovered section marker with metadata.
+/// Returns the list of file extensions that toggle knows how to handle.
+pub fn supported_extensions() -> &'static [&'static str] {
+    &[
+        "py", "sh", "rb", "yaml", "yml", "toml", "r", "ex", "exs", "pl", "pm", "js", "jsx", "ts",
+        "tsx", "rs", "java", "c", "cpp", "go", "swift", "kt", "scala", "php", "lua", "hs", "sql",
+    ]
+}
+
+/// A discovered section marker with metadata (used by discover_sections and find_and_toggle_section).
 #[derive(Debug, Clone)]
 pub struct SectionInfo {
     pub id: String,
@@ -20,6 +28,17 @@ pub struct SectionInfo {
 pub struct SectionToggleResult {
     pub modified: bool,
     pub desc: Option<String>,
+}
+
+/// Information about a discovered toggle section for scan output.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ScanSectionInfo {
+    pub id: String,
+    pub file: String,
+    pub start_line: usize,
+    pub end_line: Option<usize>,
+    pub description: Option<String>,
+    pub state: String,
 }
 
 /// Extract the `desc="..."` value from a section marker line.
@@ -100,6 +119,94 @@ pub fn discover_sections(content: &str) -> Vec<SectionInfo> {
     }
 
     sections
+}
+
+/// Scan file content for toggle:start / toggle:end markers.
+/// Returns all sections found with state info. Does not modify anything.
+pub fn scan_sections(path: &Path, content: &str) -> Vec<ScanSectionInfo> {
+    let lines: Vec<&str> = content.lines().collect();
+    let mut sections = Vec::new();
+    let file_str = path.display().to_string();
+
+    // Determine comment style for state detection
+    let comment_marker = get_comment_style(path, "auto", None)
+        .map(|cs| cs.single_line)
+        .unwrap_or_else(|_| "#".to_string());
+
+    let mut i = 0;
+    while i < lines.len() {
+        if let Some(_pos) = lines[i].find("toggle:start ID=") {
+            let id = parse_section_id(lines[i]).unwrap_or_default();
+            if id.is_empty() {
+                i += 1;
+                continue;
+            }
+
+            // Extract optional description
+            let description = parse_section_desc(lines[i]);
+
+            let start_line = i + 1; // 1-based
+
+            // Find matching end marker
+            let mut end_line = None;
+            #[allow(clippy::needless_range_loop)]
+            for j in (i + 1)..lines.len() {
+                if line_matches_end(lines[j], &id) {
+                    end_line = Some(j + 1); // 1-based
+                    break;
+                }
+            }
+
+            // Determine state of content between markers
+            let state = if let Some(end) = end_line {
+                let content_start = i + 1;
+                let content_end = end - 1; // back to 0-based for the end marker line
+                detect_section_state(&lines[content_start..content_end], &comment_marker)
+            } else {
+                "unknown".to_string()
+            };
+
+            sections.push(ScanSectionInfo {
+                id,
+                file: file_str.clone(),
+                start_line,
+                end_line,
+                description,
+                state,
+            });
+
+            if let Some(end) = end_line {
+                i = end;
+            } else {
+                i += 1;
+            }
+        } else {
+            i += 1;
+        }
+    }
+
+    sections
+}
+
+/// Detect whether section content is commented, uncommented, or mixed.
+fn detect_section_state(lines: &[&str], comment_marker: &str) -> String {
+    let non_empty: Vec<&&str> = lines.iter().filter(|l| !l.trim().is_empty()).collect();
+    if non_empty.is_empty() {
+        return "empty".to_string();
+    }
+
+    let commented_count = non_empty
+        .iter()
+        .filter(|l| l.trim_start().starts_with(comment_marker))
+        .count();
+
+    if commented_count == non_empty.len() {
+        "commented".to_string()
+    } else if commented_count == 0 {
+        "uncommented".to_string()
+    } else {
+        "mixed".to_string()
+    }
 }
 
 /// Line range representation
