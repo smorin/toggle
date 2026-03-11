@@ -880,6 +880,7 @@ dependencies = [
  "criterion",
  "encoding_rs",
  "fd-lock",
+ "libc",
  "predicates",
  "serde",
  "serde_json",

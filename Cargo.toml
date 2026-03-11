@@ -43,6 +43,10 @@ signal-hook = "0.3"
 # Cross-platform advisory file locking for concurrent atomic execution prevention
 fd-lock = "4"
 
+[target.'cfg(target_os = "macos")'.dependencies]
+# macOS F_FULLFSYNC support for durable fsync
+libc = "0.2"
+
 [package.metadata.cargo-semver-checks.lints]
 constructible_struct_adds_field = "allow"
 
