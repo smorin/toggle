@@ -283,7 +283,16 @@ fn file_has_matching_sections(path: &Path, section_ids: &[String], encoding: &st
         Err(_) => return false,
     };
     let found = core::discover_sections(&content);
-    found.iter().any(|s| section_ids.contains(&s.id))
+    section_ids.iter().any(|id| {
+        let (group, variant) = core::parse_id_parts(id);
+        found.iter().any(|s| match &variant {
+            Some(v) => s.id == format!("{group}:{v}"),
+            None => {
+                // Solo or group: match exact id or any variant whose group equals our id.
+                s.id == *id || core::parse_id_parts(&s.id).0 == group
+            }
+        })
+    })
 }
 
 /// Collect files from CLI paths and apply recursive-mode filters
@@ -516,6 +525,7 @@ fn compute_line_range_changes(
 }
 
 /// Compute section toggle changes without writing.
+/// Routes between solo, pair-flip, activate, force-all and 3+ error per PRD §0.13.3.
 fn compute_section_changes(
     path: &Path,
     section_id: &str,
@@ -523,19 +533,36 @@ fn compute_section_changes(
     content: &str,
 ) -> Result<String> {
     let comment_style = resolve_comment_style(path, opts)?;
-    let mut lines: Vec<String> = content.lines().map(String::from).collect();
+    let (group, variant) = core::parse_id_parts(section_id);
 
-    let result = core::find_and_toggle_section(&mut lines, section_id, opts.force, &comment_style)?;
-
-    if result.modified {
-        let mut joined = lines.join("\n");
-        if content.ends_with('\n') {
-            joined.push('\n');
+    let toggled = match variant {
+        Some(v) => core::activate_variant(content, &group, &v, &comment_style)?,
+        None => {
+            let variants = core::discover_variants(content, &group);
+            // Solo path preserves prior behavior (no error if section missing — caller handles).
+            if variants.len() <= 1 && opts.force.is_none() {
+                let mut lines: Vec<String> = content.lines().map(String::from).collect();
+                let result = core::find_and_toggle_section(
+                    &mut lines,
+                    section_id,
+                    opts.force,
+                    &comment_style,
+                )?;
+                if !result.modified {
+                    return Ok(content.to_string());
+                }
+                let mut joined = lines.join("\n");
+                if content.ends_with('\n') {
+                    joined.push('\n');
+                }
+                joined
+            } else {
+                core::toggle_variant_group(content, &group, opts.force, &comment_style)?
+            }
         }
-        Ok(io::normalize_eol(&joined, opts.eol))
-    } else {
-        Ok(content.to_string())
-    }
+    };
+
+    Ok(io::normalize_eol(&toggled, opts.eol))
 }
 
 fn run_json(cli: &Cli, opts: &ToggleOptions) -> Result<()> {
@@ -863,52 +890,46 @@ fn toggle_line_ranges(
 }
 
 fn toggle_section(path: &Path, section_id: &str, opts: &ToggleOptions) -> Result<ProcessResult> {
-    let comment_style = resolve_comment_style(path, opts)?;
-
     if opts.verbose {
         eprintln!("  Looking for section with ID={}", section_id);
-        eprintln!(
-            "  Using comment style: {} for single-line comments",
-            comment_style.single_line
-        );
     }
 
     let original_content = io::read_file_encoded(path, opts.encoding)?;
-    let mut lines: Vec<String> = original_content.lines().map(String::from).collect();
+    let modified = compute_section_changes(path, section_id, opts, &original_content)?;
 
-    if opts.verbose {
-        eprintln!("  File has {} lines", lines.len());
-    }
-
-    let result = core::find_and_toggle_section(&mut lines, section_id, opts.force, &comment_style)?;
-
-    if opts.verbose {
-        if let Some(ref d) = result.desc {
-            eprintln!("  Section desc: {}", d);
+    let lines_changed = if modified == original_content {
+        if opts.verbose {
+            eprintln!("  No changes made to file");
         }
-    }
-
-    let mut lines_changed = 0;
-
-    if result.modified {
+        0
+    } else {
         if opts.verbose {
             eprintln!("  File modified, writing changes back");
         }
-        let mut joined = lines.join("\n");
-        if original_content.ends_with('\n') {
-            joined.push('\n');
+        apply_changes(path, &original_content, &modified, opts)?
+    };
+
+    // Resolve desc by looking up the matching section/variant.
+    let (group, variant) = core::parse_id_parts(section_id);
+    let desc = core::discover_variants(&original_content, &group)
+        .into_iter()
+        .find(|s| match &variant {
+            Some(v) => s.id == format!("{group}:{v}"),
+            None => s.id == section_id || core::parse_id_parts(&s.id).1.is_some(),
+        })
+        .and_then(|s| s.desc);
+
+    if opts.verbose {
+        if let Some(ref d) = desc {
+            eprintln!("  Section desc: {}", d);
         }
-        let content = io::normalize_eol(&joined, opts.eol);
-        lines_changed = apply_changes(path, &original_content, &content, opts)?;
-    } else if opts.verbose {
-        eprintln!("  No changes made to file");
     }
 
     Ok(ProcessResult {
         action: "toggle_section".to_string(),
         lines_changed,
         section_id: Some(section_id.to_string()),
-        desc: result.desc,
+        desc,
     })
 }
 
