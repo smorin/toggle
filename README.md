@@ -1,10 +1,122 @@
 # toggle
-A Rust-based CLI and library for toggling, adding, removing, and updating code/comments across multiple languages, featuring flexible extension mappings and full configurability via file or command-line.
 
+A Rust CLI for toggling comment blocks in source code. Comment / uncomment line
+ranges, named sections, or grouped variants across one or many files —
+deterministic, atomic, language-aware.
 
-Below is a structured technical requirements document for a command-line tool called **`toggle`**. This tool enables toggling comment blocks in one or more files. The focus is on Rust implementation details, supported comment styles, and multi-file toggling. Each section is designed to capture your requirements in a clear, concise format.
+## Install
+
+```bash
+cargo install --path .
+# or, once published:
+cargo install toggle
+```
+
+Pre-built binaries via Homebrew are not yet published; see the [Distribution](#distribution) section.
+
+## Quick start
+
+```bash
+# Toggle a line range in a Python file
+toggle -l 10:20 main.py
+
+# Toggle a named section across all matching files
+toggle -S featureXYZ src/
+
+# Force a section commented across a tree
+toggle -S debug --force on -R src/
+
+# Discover what sections exist in a tree
+toggle --scan -R src/
+```
+
+## Section markers
+
+Wrap any block in a paired marker comment that the tool can find:
+
+```python
+# toggle:start ID=featureX desc="Optional description"
+print("guarded code")
+# toggle:end ID=featureX
+```
+
+The single-line comment style is inferred from the file extension; override
+with `--comment-style "//"` (single) or `--comment-style "//" "/*" "*/"` (with
+multi-line delimiters).
+
+## Section variants (`group:variant`)
+
+Use a `:` in the ID to mark variants of the same group. The CLI then knows
+how to swap, activate, or fan-out across them.
+
+```python
+# toggle:start ID=db:sqlite
+import sqlite3
+# toggle:end ID=db:sqlite
+
+# toggle:start ID=db:postgres
+# import psycopg2
+# toggle:end ID=db:postgres
+```
+
+| Command | Behavior |
+|---|---|
+| `toggle -S db file.py` | **Pair flip** — swap active and commented variants (errors on 3+ variants without a qualifier) |
+| `toggle -S db:postgres file.py` | **Activate** — uncomment `db:postgres`, comment every other `db:*` |
+| `toggle -S db --force on file.py` | **Force all** — comment every variant in `db` |
+| `toggle -S db --pair file.py` | **Guard** — fail before any write if `db` does not have exactly 2 variants |
+
+## Scan & check
+
+```bash
+# Per-file table with a TYPE column (solo / pair / group)
+toggle --scan src/app.py
+
+# Recursive summary, one row per group
+toggle --scan -R src/
+
+# Detailed view of one group: file refs + state per variant
+toggle --scan -S db -R src/
+
+# Validate without modifying: unclosed markers, duplicate IDs, cross-file gaps
+toggle --scan --check -R src/
+
+# Same, but only flag groups that should be pairs
+toggle --scan --check --pair -R src/
+
+# Machine-readable nested JSON
+toggle --scan -R src/ --json
+```
+
+`--check` exits non-zero on any error finding (unclosed markers, duplicate
+IDs); warnings (variant gaps, pair-count mismatches) do not fail the run.
+
+## Atomic multi-file mode
+
+```bash
+# All files succeed or none are modified — backups created by default
+toggle -S db:postgres --atomic -R src/
+
+# Recover from an interrupted atomic run
+toggle --recover            # rolls back
+toggle --recover --recover-forward   # completes the commit
+```
+
+## Distribution
+
+- **From source:** `cargo install --path .`
+- **Shell completions:** `toggle completions bash > /etc/bash_completion.d/toggle`
+  (also `zsh`, `fish`, `powershell`, `elvish`)
+- **Man page:** `toggle man > toggle.1 && man ./toggle.1`
+- **crates.io / Homebrew:** not yet published.
 
 ---
+
+## Reference
+
+The remainder of this README is the original design spec, retained for
+historical context. CLI semantics in the spec match what's implemented unless
+called out above.
 
 ## 1. Overview
 
