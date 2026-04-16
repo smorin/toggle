@@ -1002,6 +1002,32 @@ fn run_scan(cli: &Cli) -> Result<()> {
         }
     }
 
+    if cli.check {
+        let mut per_file: BTreeMap<PathBuf, Vec<core::ScanSectionInfo>> = BTreeMap::new();
+        for s in &all_sections {
+            per_file
+                .entry(PathBuf::from(&s.file))
+                .or_default()
+                .push(s.clone());
+        }
+        let per_file_vec: Vec<_> = per_file.into_iter().collect();
+        let issues = core::validate_sections(&per_file_vec, cli.pair);
+
+        if cli.json {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&issues).expect("Failed to serialize JSON")
+            );
+        } else {
+            print_check_results(&issues);
+        }
+
+        if check_has_errors(&issues) {
+            return Err(anyhow::anyhow!("validation failed"));
+        }
+        return Ok(());
+    }
+
     if cli.json {
         let root = core::build_scan_json(&all_sections);
         println!(
@@ -1016,6 +1042,32 @@ fn run_scan(cli: &Cli) -> Result<()> {
         print_scan_results(&all_sections);
     }
     Ok(())
+}
+
+fn print_check_results(issues: &[core::CheckIssue]) {
+    if issues.is_empty() {
+        println!("OK    no issues found");
+        return;
+    }
+    for i in issues {
+        let tag = match i.level {
+            core::CheckLevel::Ok => "OK  ",
+            core::CheckLevel::Warn => "WARN",
+            core::CheckLevel::Err => "ERR ",
+        };
+        let file_part = i
+            .file
+            .as_deref()
+            .map(|f| format!(" ({f})"))
+            .unwrap_or_default();
+        println!("{tag}  {:<18} {}{file_part}", i.group, i.message);
+    }
+}
+
+fn check_has_errors(issues: &[core::CheckIssue]) -> bool {
+    issues
+        .iter()
+        .any(|i| matches!(i.level, core::CheckLevel::Err))
 }
 
 fn print_scan_summary(sections: &[core::ScanSectionInfo]) {

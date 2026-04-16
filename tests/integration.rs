@@ -2016,3 +2016,70 @@ fn scan_detailed_view_for_specific_variant() {
     // Should NOT include sibling variant
     assert!(!stdout.contains("db:sqlite"), "stdout: {stdout}");
 }
+
+#[test]
+fn check_reports_pair_mismatch_with_pair_flag() {
+    let dir = TempDir::new().unwrap();
+    fs::copy("tests/fixtures/variants.py", dir.path().join("variants.py")).unwrap();
+
+    let output = cmd()
+        .args(["--scan", "--check", "--pair", dir.path().to_str().unwrap()])
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("cache"), "stdout: {stdout}");
+    assert!(
+        stdout.contains("WARN") || stdout.contains("ERR"),
+        "stdout: {stdout}"
+    );
+}
+
+#[test]
+fn check_clean_scan_reports_ok() {
+    let dir = TempDir::new().unwrap();
+    fs::write(
+        dir.path().join("clean.py"),
+        "# toggle:start ID=foo\nx = 1\n# toggle:end ID=foo\n",
+    )
+    .unwrap();
+
+    let output = cmd()
+        .args(["--scan", "--check", dir.path().to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("OK"), "stdout: {stdout}");
+}
+
+#[test]
+fn check_without_scan_errors() {
+    let dir = TempDir::new().unwrap();
+    fs::write(dir.path().join("a.py"), "x\n").unwrap();
+    cmd()
+        .args(["--check", dir.path().to_str().unwrap()])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--check requires --scan"));
+}
+
+#[test]
+fn check_unclosed_marker_exits_nonzero() {
+    let dir = TempDir::new().unwrap();
+    fs::write(
+        dir.path().join("bad.py"),
+        "# toggle:start ID=foo\nx = 1\n",
+    )
+    .unwrap();
+    let output = cmd()
+        .args(["--scan", "--check", dir.path().to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(!output.status.success(), "expected failure");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("unclosed"), "stdout: {stdout}");
+}
