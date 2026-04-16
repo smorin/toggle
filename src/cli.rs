@@ -92,6 +92,10 @@ pub struct Cli {
     #[arg(long = "scan")]
     pub scan: bool,
 
+    /// Validate section integrity without modifying files. Requires --scan.
+    #[arg(long = "check")]
+    pub check: bool,
+
     /// Enforce exactly 2 variants in the targeted group; error otherwise.
     /// Pre-execution check — no file modifications occur on failure.
     #[arg(long = "pair")]

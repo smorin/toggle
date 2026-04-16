@@ -209,6 +209,10 @@ fn run(cli: &Cli) -> Result<()> {
         return run_scan(cli);
     }
 
+    if cli.check && !cli.scan {
+        return Err(UsageError("--check requires --scan".into()).into());
+    }
+
     // Validate --comment-style: must be 1 or 3 values
     if cli.comment_style.len() == 2 {
         return Err(UsageError(
