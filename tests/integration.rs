@@ -1372,14 +1372,18 @@ fn test_scan_json_output() {
         .unwrap();
     assert!(output.status.success());
 
-    let json: Vec<Value> = serde_json::from_slice(&output.stdout)
-        .expect("scan --json should produce valid JSON array");
-    assert_eq!(json.len(), 1);
-    assert_eq!(json[0]["id"], "test");
-    assert_eq!(json[0]["description"], "A test");
-    assert_eq!(json[0]["state"], "commented");
-    assert!(json[0]["start_line"].is_number());
-    assert!(json[0]["end_line"].is_number());
+    let json: Value = serde_json::from_slice(&output.stdout)
+        .expect("scan --json should produce valid nested JSON");
+    let sections = json["sections"].as_array().expect("sections array");
+    assert_eq!(sections.len(), 1);
+    assert_eq!(sections[0]["id"], "test");
+    assert_eq!(sections[0]["type"], "solo");
+    let files = sections[0]["files"].as_array().expect("files array");
+    assert_eq!(files.len(), 1);
+    assert_eq!(files[0]["state"], "commented");
+    assert_eq!(files[0]["desc"], "A test");
+    assert!(files[0]["start"].is_number());
+    assert!(files[0]["end"].is_number());
 }
 
 #[test]
@@ -1939,6 +1943,50 @@ fn scan_detailed_view_for_group() {
     assert!(stdout.contains("cache:memcached"), "stdout: {stdout}");
     assert!(stdout.contains("cache:inmemory"), "stdout: {stdout}");
     assert!(stdout.contains("variants.py"), "stdout: {stdout}");
+}
+
+#[test]
+fn scan_json_emits_nested_tree() {
+    let dir = TempDir::new().unwrap();
+    fs::copy("tests/fixtures/variants.py", dir.path().join("variants.py")).unwrap();
+
+    let output = cmd()
+        .args(["--scan", "--json", dir.path().to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let v: serde_json::Value = serde_json::from_str(&stdout).expect("valid JSON");
+    let sections = v["sections"].as_array().expect("sections array");
+
+    // Solo: debug
+    let debug = sections
+        .iter()
+        .find(|e| e["id"] == "debug")
+        .expect("debug entry");
+    assert_eq!(debug["type"], "solo");
+    assert!(debug["files"].as_array().unwrap().len() >= 1);
+
+    // Pair: db
+    let db = sections
+        .iter()
+        .find(|e| e["group"] == "db")
+        .expect("db entry");
+    assert_eq!(db["type"], "pair");
+    let variants = db["variants"].as_array().unwrap();
+    assert_eq!(variants.len(), 2);
+
+    // Group: cache (3 variants)
+    let cache = sections
+        .iter()
+        .find(|e| e["group"] == "cache")
+        .expect("cache entry");
+    assert_eq!(cache["type"], "group");
+    assert_eq!(cache["variants"].as_array().unwrap().len(), 3);
 }
 
 #[test]

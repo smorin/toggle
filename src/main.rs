@@ -999,9 +999,10 @@ fn run_scan(cli: &Cli) -> Result<()> {
     }
 
     if cli.json {
+        let root = core::build_scan_json(&all_sections);
         println!(
             "{}",
-            serde_json::to_string_pretty(&all_sections).expect("Failed to serialize JSON")
+            serde_json::to_string_pretty(&root).expect("Failed to serialize JSON")
         );
     } else if !cli.sections.is_empty() {
         print_scan_detailed(&all_sections, &cli.sections);

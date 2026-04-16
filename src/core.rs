@@ -811,6 +811,116 @@ pub fn summarize_scan(sections: &[ScanSectionInfo]) -> Vec<GroupSummary> {
         .collect()
 }
 
+/// JSON file reference for `--scan --json` output (PRD §0.14.4).
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ScanJsonFile {
+    pub path: String,
+    pub start: usize,
+    pub end: Option<usize>,
+    pub state: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub desc: Option<String>,
+}
+
+/// One variant inside a pair/group entry.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ScanJsonVariant {
+    pub id: String,
+    pub state: String,
+    pub files: Vec<ScanJsonFile>,
+}
+
+/// One top-level entry in the scan JSON tree (solo or grouped).
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(untagged)]
+pub enum ScanJsonEntry {
+    Solo {
+        id: String,
+        #[serde(rename = "type")]
+        section_type: SectionType,
+        files: Vec<ScanJsonFile>,
+    },
+    Group {
+        group: String,
+        #[serde(rename = "type")]
+        section_type: SectionType,
+        variants: Vec<ScanJsonVariant>,
+    },
+}
+
+/// Root of the nested scan JSON tree.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ScanJsonRoot {
+    pub sections: Vec<ScanJsonEntry>,
+}
+
+/// Build the nested scan JSON tree from flat scan rows (PRD §0.14.4).
+pub fn build_scan_json(sections: &[ScanSectionInfo]) -> ScanJsonRoot {
+    use std::collections::BTreeMap;
+    let mut groups: BTreeMap<String, Vec<&ScanSectionInfo>> = BTreeMap::new();
+    for s in sections {
+        groups.entry(s.group.clone()).or_default().push(s);
+    }
+
+    let mut entries = Vec::new();
+    for (group, items) in groups {
+        let mut variant_ids: Vec<String> =
+            items.iter().filter_map(|s| s.variant.clone()).collect();
+        variant_ids.sort();
+        variant_ids.dedup();
+
+        let section_type = match variant_ids.len() {
+            0 | 1 => SectionType::Solo,
+            2 => SectionType::Pair,
+            _ => SectionType::Group,
+        };
+
+        if matches!(section_type, SectionType::Solo) {
+            let files = items.iter().map(|s| ScanJsonFile {
+                path: s.file.clone(),
+                start: s.start_line,
+                end: s.end_line,
+                state: s.state.clone(),
+                desc: s.description.clone(),
+            }).collect();
+            entries.push(ScanJsonEntry::Solo {
+                id: group,
+                section_type,
+                files,
+            });
+        } else {
+            let mut by_id: BTreeMap<String, Vec<&ScanSectionInfo>> = BTreeMap::new();
+            for s in &items {
+                by_id.entry(s.id.clone()).or_default().push(s);
+            }
+            let variants = by_id
+                .into_iter()
+                .map(|(id, recs)| {
+                    let state = recs[0].state.clone();
+                    let files = recs
+                        .iter()
+                        .map(|s| ScanJsonFile {
+                            path: s.file.clone(),
+                            start: s.start_line,
+                            end: s.end_line,
+                            state: s.state.clone(),
+                            desc: s.description.clone(),
+                        })
+                        .collect();
+                    ScanJsonVariant { id, state, files }
+                })
+                .collect();
+            entries.push(ScanJsonEntry::Group {
+                group,
+                section_type,
+                variants,
+            });
+        }
+    }
+
+    ScanJsonRoot { sections: entries }
+}
+
 /// Activate `group:variant`: uncomment that variant, comment every other variant of the group.
 pub fn activate_variant(
     content: &str,

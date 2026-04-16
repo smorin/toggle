@@ -576,3 +576,55 @@ print("x")
     assert_eq!(debug.group, "debug");
     assert_eq!(debug.variant, None);
 }
+
+// ── build_scan_json (PRD §0.14.4) ──
+
+#[test]
+fn build_scan_json_emits_solo_and_grouped_entries() {
+    use toggle::core::{build_scan_json, ScanJsonEntry, SectionType};
+    let content = r#"
+# toggle:start ID=db:sqlite
+x = 1
+# toggle:end ID=db:sqlite
+
+# toggle:start ID=db:postgres
+# y = 2
+# toggle:end ID=db:postgres
+
+# toggle:start ID=debug desc="Debug output"
+print("d")
+# toggle:end ID=debug
+"#;
+    let sections = scan_sections(Path::new("src/app.py"), content);
+    let root = build_scan_json(&sections);
+
+    assert_eq!(root.sections.len(), 2);
+
+    let debug = root.sections.iter().find(|e| matches!(e, ScanJsonEntry::Solo { id, .. } if id == "debug"));
+    let debug = debug.expect("debug solo entry");
+    match debug {
+        ScanJsonEntry::Solo { section_type, files, .. } => {
+            assert_eq!(section_type, &SectionType::Solo);
+            assert_eq!(files.len(), 1);
+            assert_eq!(files[0].path, "src/app.py");
+            assert_eq!(files[0].state, "uncommented");
+            assert_eq!(files[0].desc.as_deref(), Some("Debug output"));
+        }
+        _ => panic!("expected Solo"),
+    }
+
+    let db = root.sections.iter().find(|e| matches!(e, ScanJsonEntry::Group { group, .. } if group == "db"));
+    let db = db.expect("db group entry");
+    match db {
+        ScanJsonEntry::Group { section_type, variants, .. } => {
+            assert_eq!(section_type, &SectionType::Pair);
+            assert_eq!(variants.len(), 2);
+            let sqlite = variants.iter().find(|v| v.id == "db:sqlite").unwrap();
+            assert_eq!(sqlite.state, "uncommented");
+            assert_eq!(sqlite.files.len(), 1);
+            let postgres = variants.iter().find(|v| v.id == "db:postgres").unwrap();
+            assert_eq!(postgres.state, "commented");
+        }
+        _ => panic!("expected Group"),
+    }
+}
