@@ -224,6 +224,14 @@ fn run(cli: &Cli) -> Result<()> {
         return Err(UsageError("--to-end requires at least one --line range".into()).into());
     }
 
+    // Validate --pair: pre-execution guard per PRD §0.13.4
+    if cli.pair {
+        if cli.sections.is_empty() {
+            return Err(UsageError("--pair requires at least one -S <group>".into()).into());
+        }
+        validate_pair_groups(cli)?;
+    }
+
     // Validate --list-sections conflicts
     if cli.list_sections && !cli.lines.is_empty() {
         return Err(UsageError("--list-sections cannot be combined with --line".into()).into());
@@ -270,6 +278,35 @@ fn run(cli: &Cli) -> Result<()> {
     } else {
         run_normal(cli, &opts)
     }
+}
+
+/// Per PRD §0.13.4: error if any targeted group does not contain exactly 2 variants
+/// in any input file. Runs before file mutation; failure leaves all files untouched.
+fn validate_pair_groups(cli: &Cli) -> Result<()> {
+    let walk_opts = walk::WalkOptions {
+        verbose: cli.verbose,
+        ..walk::WalkOptions::default()
+    };
+    let files = walk::collect_files(&cli.paths, cli.recursive, &walk_opts)?;
+
+    for section in &cli.sections {
+        let (group, _variant) = core::parse_id_parts(section);
+        for file in &files {
+            let content = match io::read_file_encoded(file, &cli.encoding) {
+                Ok(c) => c,
+                Err(_) => continue,
+            };
+            let count = core::discover_variants(&content, &group).len();
+            if count != 2 {
+                return Err(UsageError(format!(
+                    "--pair: group '{group}' has {count} variants in {}, expected exactly 2",
+                    file.display()
+                ))
+                .into());
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Check if a file has any sections matching the requested IDs.

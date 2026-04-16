@@ -92,6 +92,11 @@ pub struct Cli {
     #[arg(long = "scan")]
     pub scan: bool,
 
+    /// Enforce exactly 2 variants in the targeted group; error otherwise.
+    /// Pre-execution check — no file modifications occur on failure.
+    #[arg(long = "pair")]
+    pub pair: bool,
+
     /// Path to .toggleConfig TOML file
     #[arg(long = "config")]
     pub config: Option<PathBuf>,

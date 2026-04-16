@@ -1836,3 +1836,47 @@ fn variant_solo_unchanged_behavior() {
         "after: {content}"
     );
 }
+
+// ── --pair validation flag (PRD §0.13.4) ──
+
+#[test]
+fn pair_succeeds_on_two_variant_group() {
+    let (_dir, path) = copy_variants_fixture();
+    cmd()
+        .args([path.to_str().unwrap(), "-S", "db", "--pair"])
+        .assert()
+        .success();
+}
+
+#[test]
+fn pair_errors_on_three_variant_group() {
+    let (_dir, path) = copy_variants_fixture();
+    let before = fs::read_to_string(&path).unwrap();
+    cmd()
+        .args([path.to_str().unwrap(), "-S", "cache", "--pair"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--pair"))
+        .stderr(predicate::str::contains("3"));
+    let after = fs::read_to_string(&path).unwrap();
+    assert_eq!(before, after, "file modified despite --pair failure");
+}
+
+#[test]
+fn pair_errors_on_one_variant_group() {
+    let (_dir, path) = copy_variants_fixture();
+    cmd()
+        .args([path.to_str().unwrap(), "-S", "debug", "--pair"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--pair"));
+}
+
+#[test]
+fn pair_without_section_errors() {
+    let (_dir, path) = copy_variants_fixture();
+    cmd()
+        .args([path.to_str().unwrap(), "--pair"])
+        .assert()
+        .failure();
+}
