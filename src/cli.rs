@@ -14,7 +14,9 @@ pub struct Cli {
     #[arg(short = 'l', long = "line", action = clap::ArgAction::Append)]
     pub lines: Vec<String>,
 
-    /// Section ID to toggle
+    /// Section ID to toggle. Use `group:variant` (e.g. `db:postgres`) for variant ops:
+    /// `-S group` flips a 2-variant pair; `-S group:variant` activates one variant
+    /// and comments siblings; `-S group --force on/off` applies to every variant.
     #[arg(short = 'S', long = "section", action = clap::ArgAction::Append)]
     pub sections: Vec<String>,
 
