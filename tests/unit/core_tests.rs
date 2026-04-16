@@ -374,3 +374,51 @@ fn parse_id_parts_multiple_colons_uses_first() {
         ("a".to_string(), Some("b:c".to_string()))
     );
 }
+
+// ── discover_variants ──
+
+const VARIANTS_FIXTURE: &str = r#"
+# toggle:start ID=db:sqlite desc="SQLite backend"
+import sqlite3
+# toggle:end ID=db:sqlite
+
+# toggle:start ID=db:postgres desc="Postgres backend"
+# import psycopg2
+# toggle:end ID=db:postgres
+
+# toggle:start ID=debug
+print("debug")
+# toggle:end ID=debug
+"#;
+
+#[test]
+fn discover_variants_returns_pair() {
+    let v = toggle::core::discover_variants(VARIANTS_FIXTURE, "db");
+    assert_eq!(v.len(), 2);
+    let ids: Vec<&str> = v.iter().map(|s| s.id.as_str()).collect();
+    assert!(ids.contains(&"db:sqlite"));
+    assert!(ids.contains(&"db:postgres"));
+}
+
+#[test]
+fn discover_variants_solo_only() {
+    let v = toggle::core::discover_variants(VARIANTS_FIXTURE, "debug");
+    assert_eq!(v.len(), 1);
+    assert_eq!(v[0].id, "debug");
+}
+
+#[test]
+fn discover_variants_no_match() {
+    let v = toggle::core::discover_variants(VARIANTS_FIXTURE, "missing");
+    assert!(v.is_empty());
+}
+
+#[test]
+fn discover_variants_distinguishes_groups() {
+    // Prefix collision guard: "db" must NOT match "debug".
+    let v = toggle::core::discover_variants(VARIANTS_FIXTURE, "db");
+    for s in &v {
+        let (g, _) = toggle::core::parse_id_parts(&s.id);
+        assert_eq!(g, "db");
+    }
+}

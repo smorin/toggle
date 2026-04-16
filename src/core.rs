@@ -129,6 +129,15 @@ pub fn discover_sections(content: &str) -> Vec<SectionInfo> {
     sections
 }
 
+/// Return all `SectionInfo` whose ID parses into the given group.
+/// `discover_variants(content, "db")` matches both `db` (solo) and `db:postgres` (variant).
+pub fn discover_variants(content: &str, group: &str) -> Vec<SectionInfo> {
+    discover_sections(content)
+        .into_iter()
+        .filter(|s| parse_id_parts(&s.id).0 == group)
+        .collect()
+}
+
 /// Scan file content for toggle:start / toggle:end markers.
 /// Returns all sections found with state info. Does not modify anything.
 pub fn scan_sections(path: &Path, content: &str) -> Vec<ScanSectionInfo> {
