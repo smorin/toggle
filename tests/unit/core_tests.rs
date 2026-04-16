@@ -507,6 +507,53 @@ fn activate_variant_unknown_variant_errors() {
     assert!(format!("{err}").contains("mysql"));
 }
 
+// ── summarize_scan / SectionType (PRD §0.14.1) ──
+
+#[test]
+fn summarize_scan_infers_types() {
+    use toggle::core::SectionType;
+    let content = r#"
+# toggle:start ID=db:sqlite
+x = 1
+# toggle:end ID=db:sqlite
+
+# toggle:start ID=db:postgres
+# y = 2
+# toggle:end ID=db:postgres
+
+# toggle:start ID=cache:redis
+z = 3
+# toggle:end ID=cache:redis
+
+# toggle:start ID=cache:memcached
+# a = 4
+# toggle:end ID=cache:memcached
+
+# toggle:start ID=cache:inmemory
+# b = 5
+# toggle:end ID=cache:inmemory
+
+# toggle:start ID=debug
+c = 6
+# toggle:end ID=debug
+"#;
+    let sections = scan_sections(Path::new("t.py"), content);
+    let summary = toggle::core::summarize_scan(&sections);
+
+    let by_group = |g: &str| {
+        summary
+            .iter()
+            .find(|s| s.group == g)
+            .unwrap_or_else(|| panic!("missing group {g}"))
+            .clone()
+    };
+    assert_eq!(by_group("db").section_type, SectionType::Pair);
+    assert_eq!(by_group("db").variant_count, 2);
+    assert_eq!(by_group("cache").section_type, SectionType::Group);
+    assert_eq!(by_group("cache").variant_count, 3);
+    assert_eq!(by_group("debug").section_type, SectionType::Solo);
+}
+
 // ── ScanSectionInfo group/variant fields (PRD §0.14.1) ──
 
 #[test]

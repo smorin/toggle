@@ -749,6 +749,68 @@ pub fn toggle_variant_group(
     Ok(joined)
 }
 
+/// Inferred type of a section group (PRD §0.14.1).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SectionType {
+    Solo,
+    Pair,
+    Group,
+}
+
+/// Per-group summary across one or more files.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct GroupSummary {
+    pub group: String,
+    pub section_type: SectionType,
+    pub variant_count: usize,
+    pub file_count: usize,
+    pub state: String,
+    pub variants: Vec<String>,
+}
+
+/// Group flat scan results into per-group summaries with inferred type.
+pub fn summarize_scan(sections: &[ScanSectionInfo]) -> Vec<GroupSummary> {
+    use std::collections::{BTreeMap, BTreeSet};
+    let mut groups: BTreeMap<String, Vec<&ScanSectionInfo>> = BTreeMap::new();
+    for s in sections {
+        groups.entry(s.group.clone()).or_default().push(s);
+    }
+
+    groups
+        .into_iter()
+        .map(|(group, items)| {
+            let mut variants: Vec<String> =
+                items.iter().filter_map(|s| s.variant.clone()).collect();
+            variants.sort();
+            variants.dedup();
+
+            let section_type = match variants.len() {
+                0 | 1 => SectionType::Solo,
+                2 => SectionType::Pair,
+                _ => SectionType::Group,
+            };
+
+            let files: BTreeSet<&String> = items.iter().map(|s| &s.file).collect();
+            let states: BTreeSet<&String> = items.iter().map(|s| &s.state).collect();
+            let state = if states.len() == 1 {
+                states.into_iter().next().unwrap().clone()
+            } else {
+                "mixed".to_string()
+            };
+
+            GroupSummary {
+                group,
+                section_type,
+                variant_count: variants.len(),
+                file_count: files.len(),
+                state,
+                variants,
+            }
+        })
+        .collect()
+}
+
 /// Activate `group:variant`: uncomment that variant, comment every other variant of the group.
 pub fn activate_variant(
     content: &str,
