@@ -1831,5 +1831,8 @@ fn variant_solo_unchanged_behavior() {
         .assert()
         .success();
     let content = fs::read_to_string(&path).unwrap();
-    assert!(content.contains("# print(\"debug enabled\")"), "after: {content}");
+    assert!(
+        content.contains("# print(\"debug enabled\")"),
+        "after: {content}"
+    );
 }
