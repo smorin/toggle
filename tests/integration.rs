@@ -1917,3 +1917,46 @@ fn scan_recursive_emits_summary() {
     // Per-group rows, not per-file rows
     assert!(!stdout.contains("variants.py"), "stdout: {stdout}");
 }
+
+#[test]
+fn scan_detailed_view_for_group() {
+    let dir = TempDir::new().unwrap();
+    fs::copy("tests/fixtures/variants.py", dir.path().join("variants.py")).unwrap();
+
+    let output = cmd()
+        .args(["--scan", "-S", "cache", dir.path().to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("GROUP: cache"), "stdout: {stdout}");
+    assert!(stdout.contains("group, 3 variants"), "stdout: {stdout}");
+    assert!(stdout.contains("cache:redis"), "stdout: {stdout}");
+    assert!(stdout.contains("cache:memcached"), "stdout: {stdout}");
+    assert!(stdout.contains("cache:inmemory"), "stdout: {stdout}");
+    assert!(stdout.contains("variants.py"), "stdout: {stdout}");
+}
+
+#[test]
+fn scan_detailed_view_for_specific_variant() {
+    let dir = TempDir::new().unwrap();
+    fs::copy("tests/fixtures/variants.py", dir.path().join("variants.py")).unwrap();
+
+    let output = cmd()
+        .args(["--scan", "-S", "db:postgres", dir.path().to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("db:postgres"), "stdout: {stdout}");
+    // Should NOT include sibling variant
+    assert!(!stdout.contains("db:sqlite"), "stdout: {stdout}");
+}
