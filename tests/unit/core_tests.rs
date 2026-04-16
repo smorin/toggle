@@ -600,10 +600,17 @@ print("d")
 
     assert_eq!(root.sections.len(), 2);
 
-    let debug = root.sections.iter().find(|e| matches!(e, ScanJsonEntry::Solo { id, .. } if id == "debug"));
+    let debug = root
+        .sections
+        .iter()
+        .find(|e| matches!(e, ScanJsonEntry::Solo { id, .. } if id == "debug"));
     let debug = debug.expect("debug solo entry");
     match debug {
-        ScanJsonEntry::Solo { section_type, files, .. } => {
+        ScanJsonEntry::Solo {
+            section_type,
+            files,
+            ..
+        } => {
             assert_eq!(section_type, &SectionType::Solo);
             assert_eq!(files.len(), 1);
             assert_eq!(files[0].path, "src/app.py");
@@ -613,10 +620,17 @@ print("d")
         _ => panic!("expected Solo"),
     }
 
-    let db = root.sections.iter().find(|e| matches!(e, ScanJsonEntry::Group { group, .. } if group == "db"));
+    let db = root
+        .sections
+        .iter()
+        .find(|e| matches!(e, ScanJsonEntry::Group { group, .. } if group == "db"));
     let db = db.expect("db group entry");
     match db {
-        ScanJsonEntry::Group { section_type, variants, .. } => {
+        ScanJsonEntry::Group {
+            section_type,
+            variants,
+            ..
+        } => {
             assert_eq!(section_type, &SectionType::Pair);
             assert_eq!(variants.len(), 2);
             let sqlite = variants.iter().find(|v| v.id == "db:sqlite").unwrap();

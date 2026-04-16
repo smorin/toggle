@@ -1020,8 +1020,8 @@ fn print_scan_summary(sections: &[core::ScanSectionInfo]) {
         return;
     }
     println!(
-        "{:<20} {:<7} {:<7} {:<10} {}",
-        "SECTION", "TYPE", "FILES", "VARIANTS", "STATE"
+        "{:<20} {:<7} {:<7} {:<10} STATE",
+        "SECTION", "TYPE", "FILES", "VARIANTS"
     );
     println!("{}", "\u{2500}".repeat(60));
 
@@ -1102,15 +1102,17 @@ fn print_scan_results(sections: &[core::ScanSectionInfo]) {
     }
 
     println!(
-        "{:<20} {:<7} {:<12} {:<14} {}",
-        "SECTION", "TYPE", "STATE", "LINES", "DESCRIPTION"
+        "{:<20} {:<7} {:<12} {:<14} DESCRIPTION",
+        "SECTION", "TYPE", "STATE", "LINES"
     );
     println!("{}", "\u{2500}".repeat(80));
 
     let summaries = core::summarize_scan(sections);
     for summary in &summaries {
-        let mut items: Vec<&core::ScanSectionInfo> =
-            sections.iter().filter(|s| s.group == summary.group).collect();
+        let mut items: Vec<&core::ScanSectionInfo> = sections
+            .iter()
+            .filter(|s| s.group == summary.group)
+            .collect();
         items.sort_by_key(|s| (s.file.clone(), s.start_line));
 
         let type_label = section_type_label(&summary.section_type);

@@ -1893,7 +1893,11 @@ fn scan_table_shows_type_column() {
         .args(["--scan", "tests/fixtures/variants.py"])
         .output()
         .unwrap();
-    assert!(output.status.success(), "stderr: {}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("SECTION"), "stdout: {stdout}");
     assert!(stdout.contains("TYPE"), "stdout: {stdout}");
@@ -1912,7 +1916,11 @@ fn scan_recursive_emits_summary() {
         .args(["--scan", "-R", dir.path().to_str().unwrap()])
         .output()
         .unwrap();
-    assert!(output.status.success(), "stderr: {}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("FILES"), "stdout: {stdout}");
     assert!(stdout.contains("VARIANTS"), "stdout: {stdout}");

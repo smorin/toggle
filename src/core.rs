@@ -864,8 +864,7 @@ pub fn build_scan_json(sections: &[ScanSectionInfo]) -> ScanJsonRoot {
 
     let mut entries = Vec::new();
     for (group, items) in groups {
-        let mut variant_ids: Vec<String> =
-            items.iter().filter_map(|s| s.variant.clone()).collect();
+        let mut variant_ids: Vec<String> = items.iter().filter_map(|s| s.variant.clone()).collect();
         variant_ids.sort();
         variant_ids.dedup();
 
@@ -876,13 +875,16 @@ pub fn build_scan_json(sections: &[ScanSectionInfo]) -> ScanJsonRoot {
         };
 
         if matches!(section_type, SectionType::Solo) {
-            let files = items.iter().map(|s| ScanJsonFile {
-                path: s.file.clone(),
-                start: s.start_line,
-                end: s.end_line,
-                state: s.state.clone(),
-                desc: s.description.clone(),
-            }).collect();
+            let files = items
+                .iter()
+                .map(|s| ScanJsonFile {
+                    path: s.file.clone(),
+                    start: s.start_line,
+                    end: s.end_line,
+                    state: s.state.clone(),
+                    desc: s.description.clone(),
+                })
+                .collect();
             entries.push(ScanJsonEntry::Solo {
                 id: group,
                 section_type,
