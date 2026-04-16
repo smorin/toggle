@@ -1747,3 +1747,89 @@ fn test_atomic_single_file() {
     let a = fs::read_to_string(dir.path().join("a.py")).unwrap();
     assert_eq!(a, "x\n# y\nz\n");
 }
+
+// ── Section variants (PRD §0.13) ──
+
+fn copy_variants_fixture() -> (TempDir, std::path::PathBuf) {
+    let dir = TempDir::new().unwrap();
+    let dst = dir.path().join("variants.py");
+    fs::copy("tests/fixtures/variants.py", &dst).unwrap();
+    (dir, dst)
+}
+
+#[test]
+fn variant_pair_flip() {
+    let (_dir, path) = copy_variants_fixture();
+    cmd()
+        .args([path.to_str().unwrap(), "-S", "db"])
+        .assert()
+        .success();
+    let content = fs::read_to_string(&path).unwrap();
+    // sqlite block now commented, postgres now uncommented
+    assert!(content.contains("# import sqlite3"), "after: {content}");
+    assert!(content.contains("\nimport psycopg2"), "after: {content}");
+}
+
+#[test]
+fn variant_activate_named() {
+    let (_dir, path) = copy_variants_fixture();
+    cmd()
+        .args([path.to_str().unwrap(), "-S", "db:postgres"])
+        .assert()
+        .success();
+    let content = fs::read_to_string(&path).unwrap();
+    assert!(content.contains("\nimport psycopg2"), "after: {content}");
+    assert!(content.contains("# import sqlite3"), "after: {content}");
+}
+
+#[test]
+fn variant_three_errors_without_qualifier() {
+    let (_dir, path) = copy_variants_fixture();
+    let before = fs::read_to_string(&path).unwrap();
+    cmd()
+        .args([path.to_str().unwrap(), "-S", "cache"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("cache"))
+        .stderr(predicate::str::contains("3 variants"));
+    let after = fs::read_to_string(&path).unwrap();
+    assert_eq!(before, after, "file modified despite error");
+}
+
+#[test]
+fn variant_force_on_all_in_group() {
+    let (_dir, path) = copy_variants_fixture();
+    cmd()
+        .args([path.to_str().unwrap(), "-S", "cache", "--force", "on"])
+        .assert()
+        .success();
+    let content = fs::read_to_string(&path).unwrap();
+    // redis was uncommented before; should now be commented
+    assert!(content.contains("# import redis"), "after: {content}");
+    // memcache was already commented; ensure not double-commented
+    assert!(!content.contains("# # import memcache"), "after: {content}");
+}
+
+#[test]
+fn variant_force_off_all_in_group() {
+    let (_dir, path) = copy_variants_fixture();
+    cmd()
+        .args([path.to_str().unwrap(), "-S", "cache", "--force", "off"])
+        .assert()
+        .success();
+    let content = fs::read_to_string(&path).unwrap();
+    assert!(content.contains("\nimport memcache"), "after: {content}");
+    assert!(content.contains("\ncache = {}"), "after: {content}");
+}
+
+#[test]
+fn variant_solo_unchanged_behavior() {
+    // -S debug (solo) should still flip the single section.
+    let (_dir, path) = copy_variants_fixture();
+    cmd()
+        .args([path.to_str().unwrap(), "-S", "debug"])
+        .assert()
+        .success();
+    let content = fs::read_to_string(&path).unwrap();
+    assert!(content.contains("# print(\"debug enabled\")"), "after: {content}");
+}
