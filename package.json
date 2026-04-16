@@ -19,7 +19,7 @@
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "express": "^4.22.1",
-    "fastmcp": "^1.20.5",
+    "fastmcp": "^4.0.0",
     "figlet": "^1.8.0",
     "fuse.js": "^7.0.0",
     "gradient-string": "^3.0.0",
