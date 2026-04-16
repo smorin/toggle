@@ -63,6 +63,15 @@ fn parse_section_id(line: &str) -> Option<String> {
     }
 }
 
+/// Split a section ID into `(group, variant)` parts using the first `:` as separator.
+/// Solo IDs (no colon) return `(id, None)`; variant IDs return `(group, Some(variant))`.
+pub fn parse_id_parts(id: &str) -> (String, Option<String>) {
+    match id.split_once(':') {
+        Some((g, v)) => (g.to_string(), Some(v.to_string())),
+        None => (id.to_string(), None),
+    }
+}
+
 /// Check if a line contains a `toggle:start` marker with an exact section ID match.
 fn line_matches_start(line: &str, section_id: &str) -> bool {
     if !line.contains("toggle:start") {

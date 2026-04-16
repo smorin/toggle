@@ -341,3 +341,36 @@ fn test_scan_sections_javascript_comment_style() {
     assert_eq!(sections[0].id, "feature");
     assert_eq!(sections[0].state, "commented");
 }
+
+// ── parse_id_parts ──
+
+#[test]
+fn parse_id_parts_solo() {
+    assert_eq!(
+        toggle::core::parse_id_parts("debug"),
+        ("debug".to_string(), None)
+    );
+}
+
+#[test]
+fn parse_id_parts_variant() {
+    assert_eq!(
+        toggle::core::parse_id_parts("db:postgres"),
+        ("db".to_string(), Some("postgres".to_string()))
+    );
+}
+
+#[test]
+fn parse_id_parts_empty_variant_treated_as_solo() {
+    let (g, v) = toggle::core::parse_id_parts("db:");
+    assert_eq!(g, "db");
+    assert_eq!(v, Some("".to_string()));
+}
+
+#[test]
+fn parse_id_parts_multiple_colons_uses_first() {
+    assert_eq!(
+        toggle::core::parse_id_parts("a:b:c"),
+        ("a".to_string(), Some("b:c".to_string()))
+    );
+}
