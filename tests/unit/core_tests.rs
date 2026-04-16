@@ -577,6 +577,96 @@ print("x")
     assert_eq!(debug.variant, None);
 }
 
+// ── validate_sections (PRD §0.14.3) ──
+
+fn scan_one(path: &str, content: &str) -> (std::path::PathBuf, Vec<toggle::core::ScanSectionInfo>) {
+    let p = std::path::PathBuf::from(path);
+    let v = toggle::core::scan_sections(&p, content);
+    (p, v)
+}
+
+#[test]
+fn validate_flags_unclosed_marker() {
+    let (p, v) = scan_one("a.py", "# toggle:start ID=foo\nx = 1\n");
+    let issues = toggle::core::validate_sections(&[(p, v)], false);
+    assert!(
+        issues.iter().any(|i| i.message.contains("unclosed")),
+        "issues: {issues:?}"
+    );
+}
+
+#[test]
+fn validate_flags_pair_mismatch_when_pair_inferred() {
+    let three = r#"
+# toggle:start ID=cache:redis
+x = 1
+# toggle:end ID=cache:redis
+
+# toggle:start ID=cache:memcached
+# y = 2
+# toggle:end ID=cache:memcached
+
+# toggle:start ID=cache:inmemory
+# z = 3
+# toggle:end ID=cache:inmemory
+"#;
+    let (p, v) = scan_one("a.py", three);
+    let issues = toggle::core::validate_sections(&[(p, v)], true);
+    assert!(
+        issues
+            .iter()
+            .any(|i| i.group == "cache" && i.message.contains("expected 2")),
+        "issues: {issues:?}"
+    );
+}
+
+#[test]
+fn validate_flags_duplicate_id_in_file() {
+    let dup = r#"
+# toggle:start ID=foo
+x = 1
+# toggle:end ID=foo
+
+# toggle:start ID=foo
+y = 2
+# toggle:end ID=foo
+"#;
+    let (p, v) = scan_one("a.py", dup);
+    let issues = toggle::core::validate_sections(&[(p, v)], false);
+    assert!(
+        issues.iter().any(|i| i.message.contains("duplicate")),
+        "issues: {issues:?}"
+    );
+}
+
+#[test]
+fn validate_flags_cross_file_variant_mismatch() {
+    let a = r#"
+# toggle:start ID=db:sqlite
+x = 1
+# toggle:end ID=db:sqlite
+
+# toggle:start ID=db:postgres
+# y = 2
+# toggle:end ID=db:postgres
+"#;
+    let b = r#"
+# toggle:start ID=db:sqlite
+z = 3
+# toggle:end ID=db:sqlite
+"#;
+    let issues = toggle::core::validate_sections(
+        &[scan_one("a.py", a), scan_one("b.py", b)],
+        false,
+    );
+    assert!(
+        issues
+            .iter()
+            .any(|i| i.group == "db" && i.message.contains("missing")),
+        "issues: {issues:?}"
+    );
+}
+
 // ── build_scan_json (PRD §0.14.4) ──
 
 #[test]

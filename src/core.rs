@@ -923,6 +923,110 @@ pub fn build_scan_json(sections: &[ScanSectionInfo]) -> ScanJsonRoot {
     ScanJsonRoot { sections: entries }
 }
 
+/// Severity for a `--check` finding (PRD §0.14.3).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CheckLevel {
+    Ok,
+    Warn,
+    Err,
+}
+
+/// One validation finding from `validate_sections`.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct CheckIssue {
+    pub level: CheckLevel,
+    pub group: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
+    pub message: String,
+}
+
+/// Run validation on already-scanned sections grouped by file (PRD §0.14.3).
+/// `pair_only = true` skips the pair-mismatch check on solos (i.e. when invoked
+/// with `--check --pair`, a 3-variant group is still flagged).
+pub fn validate_sections(
+    per_file: &[(std::path::PathBuf, Vec<ScanSectionInfo>)],
+    pair_only: bool,
+) -> Vec<CheckIssue> {
+    use std::collections::{BTreeSet, HashMap};
+    let mut issues = Vec::new();
+
+    for (path, sections) in per_file {
+        for s in sections {
+            if s.end_line.is_none() {
+                issues.push(CheckIssue {
+                    level: CheckLevel::Err,
+                    group: s.group.clone(),
+                    file: Some(path.display().to_string()),
+                    message: format!("unclosed marker for ID={}", s.id),
+                });
+            }
+        }
+        let mut counts: HashMap<&str, usize> = HashMap::new();
+        for s in sections {
+            *counts.entry(s.id.as_str()).or_insert(0) += 1;
+        }
+        for (id, n) in counts {
+            if n > 1 {
+                issues.push(CheckIssue {
+                    level: CheckLevel::Err,
+                    group: parse_id_parts(id).0,
+                    file: Some(path.display().to_string()),
+                    message: format!("duplicate section ID '{id}' ({n} occurrences)"),
+                });
+            }
+        }
+    }
+
+    let flat: Vec<ScanSectionInfo> = per_file.iter().flat_map(|(_, v)| v.clone()).collect();
+    let summaries = summarize_scan(&flat);
+
+    for sum in &summaries {
+        let group_is_pair_like = !matches!(sum.section_type, SectionType::Solo);
+        if pair_only && group_is_pair_like && sum.variant_count != 2 {
+            issues.push(CheckIssue {
+                level: CheckLevel::Warn,
+                group: sum.group.clone(),
+                file: None,
+                message: format!("{} variants, expected 2 (pair check)", sum.variant_count),
+            });
+        }
+
+        if matches!(sum.section_type, SectionType::Pair | SectionType::Group) {
+            for (path, sections) in per_file {
+                let present: BTreeSet<String> = sections
+                    .iter()
+                    .filter(|s| s.group == sum.group)
+                    .filter_map(|s| s.variant.clone())
+                    .collect();
+                if present.is_empty() {
+                    continue;
+                }
+                let expected: BTreeSet<String> = sum.variants.iter().cloned().collect();
+                let missing: Vec<&String> = expected.difference(&present).collect();
+                if !missing.is_empty() {
+                    issues.push(CheckIssue {
+                        level: CheckLevel::Warn,
+                        group: sum.group.clone(),
+                        file: Some(path.display().to_string()),
+                        message: format!(
+                            "missing variant(s): {}",
+                            missing
+                                .iter()
+                                .map(|s| s.as_str())
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        ),
+                    });
+                }
+            }
+        }
+    }
+
+    issues
+}
+
 /// Activate `group:variant`: uncomment that variant, comment every other variant of the group.
 pub fn activate_variant(
     content: &str,
