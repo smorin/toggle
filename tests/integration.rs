@@ -1409,15 +1409,15 @@ fn test_scan_with_line_flag_errors() {
 }
 
 #[test]
-fn test_scan_with_section_flag_errors() {
+fn test_scan_with_section_flag_succeeds_for_unknown_group() {
     let dir = TempDir::new().unwrap();
     fs::write(dir.path().join("test.py"), "x\n").unwrap();
 
     cmd()
         .args([dir.path().to_str().unwrap(), "--scan", "-S", "foo"])
         .assert()
-        .failure()
-        .stderr(predicate::str::contains("--scan cannot be combined"));
+        .success()
+        .stdout(predicate::str::contains("No sections found for 'foo'"));
 }
 
 #[test]
@@ -1897,4 +1897,23 @@ fn scan_table_shows_type_column() {
     assert!(stdout.contains("pair"), "stdout: {stdout}");
     assert!(stdout.contains("group"), "stdout: {stdout}");
     assert!(stdout.contains("solo"), "stdout: {stdout}");
+}
+
+#[test]
+fn scan_recursive_emits_summary() {
+    let dir = TempDir::new().unwrap();
+    fs::copy("tests/fixtures/variants.py", dir.path().join("variants.py")).unwrap();
+
+    let output = cmd()
+        .args(["--scan", "-R", dir.path().to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "stderr: {}", String::from_utf8_lossy(&output.stderr));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("FILES"), "stdout: {stdout}");
+    assert!(stdout.contains("VARIANTS"), "stdout: {stdout}");
+    assert!(stdout.contains("db"), "stdout: {stdout}");
+    assert!(stdout.contains("cache"), "stdout: {stdout}");
+    // Per-group rows, not per-file rows
+    assert!(!stdout.contains("variants.py"), "stdout: {stdout}");
 }

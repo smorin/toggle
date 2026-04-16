@@ -197,13 +197,11 @@ fn run(cli: &Cli) -> Result<()> {
         return Err(UsageError(format!("Unsupported encoding: '{}'", cli.encoding)).into());
     }
 
-    // Handle --scan mode early (read-only, no toggle options needed)
+    // Handle --scan mode early (read-only, no toggle options needed).
+    // Per PRD §0.14.2, --scan -S <id> is the detailed group view, so --section is allowed here.
     if cli.scan {
         if !cli.lines.is_empty() {
             return Err(UsageError("--scan cannot be combined with --line".into()).into());
-        }
-        if !cli.sections.is_empty() {
-            return Err(UsageError("--scan cannot be combined with --section".into()).into());
         }
         if cli.force.is_some() {
             return Err(UsageError("--scan cannot be combined with --force".into()).into());
@@ -1005,10 +1003,87 @@ fn run_scan(cli: &Cli) -> Result<()> {
             "{}",
             serde_json::to_string_pretty(&all_sections).expect("Failed to serialize JSON")
         );
+    } else if !cli.sections.is_empty() {
+        print_scan_detailed(&all_sections, &cli.sections);
+    } else if cli.recursive {
+        print_scan_summary(&all_sections);
     } else {
         print_scan_results(&all_sections);
     }
     Ok(())
+}
+
+fn print_scan_summary(sections: &[core::ScanSectionInfo]) {
+    if sections.is_empty() {
+        println!("No toggle sections found.");
+        return;
+    }
+    println!(
+        "{:<20} {:<7} {:<7} {:<10} {}",
+        "SECTION", "TYPE", "FILES", "VARIANTS", "STATE"
+    );
+    println!("{}", "\u{2500}".repeat(60));
+
+    for s in core::summarize_scan(sections) {
+        let type_label = section_type_label(&s.section_type);
+        let variants = if matches!(s.section_type, core::SectionType::Solo) {
+            "—".to_string()
+        } else {
+            s.variant_count.to_string()
+        };
+        println!(
+            "{:<20} {:<7} {:<7} {:<10} {}",
+            s.group, type_label, s.file_count, variants, s.state
+        );
+    }
+}
+
+fn print_scan_detailed(sections: &[core::ScanSectionInfo], ids: &[String]) {
+    use std::collections::BTreeMap;
+    for id in ids {
+        let (group, variant) = core::parse_id_parts(id);
+        let in_scope: Vec<&core::ScanSectionInfo> = sections
+            .iter()
+            .filter(|s| {
+                s.group == group
+                    && match &variant {
+                        Some(v) => s.variant.as_deref() == Some(v.as_str()),
+                        None => true,
+                    }
+            })
+            .collect();
+
+        if in_scope.is_empty() {
+            println!("No sections found for '{id}'.");
+            continue;
+        }
+
+        if let Some(sum) = core::summarize_scan(sections)
+            .into_iter()
+            .find(|s| s.group == group)
+        {
+            println!(
+                "GROUP: {} ({}, {} variants)\n",
+                sum.group,
+                section_type_label(&sum.section_type),
+                sum.variant_count.max(1)
+            );
+        }
+
+        let mut by_id: BTreeMap<&String, Vec<&core::ScanSectionInfo>> = BTreeMap::new();
+        for s in in_scope {
+            by_id.entry(&s.id).or_default().push(s);
+        }
+        for (vid, items) in by_id {
+            let state = items[0].state.clone();
+            println!("  {vid} [{state}]");
+            for it in items {
+                let end = it.end_line.map_or("?".to_string(), |e| e.to_string());
+                println!("    {:<40} lines {}-{}", it.file, it.start_line, end);
+            }
+            println!();
+        }
+    }
 }
 
 fn section_type_label(t: &core::SectionType) -> &'static str {
