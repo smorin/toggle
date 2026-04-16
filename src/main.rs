@@ -1011,26 +1011,43 @@ fn run_scan(cli: &Cli) -> Result<()> {
     Ok(())
 }
 
+fn section_type_label(t: &core::SectionType) -> &'static str {
+    match t {
+        core::SectionType::Solo => "solo",
+        core::SectionType::Pair => "pair",
+        core::SectionType::Group => "group",
+    }
+}
+
 fn print_scan_results(sections: &[core::ScanSectionInfo]) {
     if sections.is_empty() {
         println!("No toggle sections found.");
         return;
     }
 
-    // Print header
     println!(
-        "{:<20} {:<45} {:<12} {:<14} Description",
-        "Section ID", "File", "Lines", "State"
+        "{:<20} {:<7} {:<12} {:<14} {}",
+        "SECTION", "TYPE", "STATE", "LINES", "DESCRIPTION"
     );
-    println!("{}", "\u{2500}".repeat(100));
+    println!("{}", "\u{2500}".repeat(80));
 
-    for s in sections {
-        let end = s.end_line.map_or("???".to_string(), |e| e.to_string());
-        let lines_str = format!("{}-{}", s.start_line, end);
-        let desc = s.description.as_deref().unwrap_or("");
-        println!(
-            "{:<20} {:<45} {:<12} {:<14} {}",
-            s.id, s.file, lines_str, s.state, desc
-        );
+    let summaries = core::summarize_scan(sections);
+    for summary in &summaries {
+        let mut items: Vec<&core::ScanSectionInfo> =
+            sections.iter().filter(|s| s.group == summary.group).collect();
+        items.sort_by_key(|s| (s.file.clone(), s.start_line));
+
+        let type_label = section_type_label(&summary.section_type);
+        for s in items {
+            let lines = match s.end_line {
+                Some(e) => format!("{}-{}", s.start_line, e),
+                None => format!("{}-?", s.start_line),
+            };
+            let desc = s.description.as_deref().unwrap_or("");
+            println!(
+                "{:<20} {:<7} {:<12} {:<14} {}",
+                s.id, type_label, s.state, lines, desc
+            );
+        }
     }
 }

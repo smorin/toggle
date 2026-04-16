@@ -1880,3 +1880,21 @@ fn pair_without_section_errors() {
         .assert()
         .failure();
 }
+
+// ── --scan output (PRD §0.14) ──
+
+#[test]
+fn scan_table_shows_type_column() {
+    let output = cmd()
+        .args(["--scan", "tests/fixtures/variants.py"])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "stderr: {}", String::from_utf8_lossy(&output.stderr));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("SECTION"), "stdout: {stdout}");
+    assert!(stdout.contains("TYPE"), "stdout: {stdout}");
+    assert!(stdout.contains("db:sqlite"), "stdout: {stdout}");
+    assert!(stdout.contains("pair"), "stdout: {stdout}");
+    assert!(stdout.contains("group"), "stdout: {stdout}");
+    assert!(stdout.contains("solo"), "stdout: {stdout}");
+}
