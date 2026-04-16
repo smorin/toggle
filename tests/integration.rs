@@ -2070,11 +2070,7 @@ fn check_without_scan_errors() {
 #[test]
 fn check_unclosed_marker_exits_nonzero() {
     let dir = TempDir::new().unwrap();
-    fs::write(
-        dir.path().join("bad.py"),
-        "# toggle:start ID=foo\nx = 1\n",
-    )
-    .unwrap();
+    fs::write(dir.path().join("bad.py"), "# toggle:start ID=foo\nx = 1\n").unwrap();
     let output = cmd()
         .args(["--scan", "--check", dir.path().to_str().unwrap()])
         .output()

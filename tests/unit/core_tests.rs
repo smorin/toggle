@@ -655,10 +655,8 @@ x = 1
 z = 3
 # toggle:end ID=db:sqlite
 "#;
-    let issues = toggle::core::validate_sections(
-        &[scan_one("a.py", a), scan_one("b.py", b)],
-        false,
-    );
+    let issues =
+        toggle::core::validate_sections(&[scan_one("a.py", a), scan_one("b.py", b)], false);
     assert!(
         issues
             .iter()
