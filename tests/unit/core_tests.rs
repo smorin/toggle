@@ -506,3 +506,26 @@ fn activate_variant_unknown_variant_errors() {
         .unwrap_err();
     assert!(format!("{err}").contains("mysql"));
 }
+
+// ── ScanSectionInfo group/variant fields (PRD §0.14.1) ──
+
+#[test]
+fn scan_sections_populates_group_and_variant() {
+    let content = r#"
+# toggle:start ID=db:sqlite
+import sqlite3
+# toggle:end ID=db:sqlite
+
+# toggle:start ID=debug
+print("x")
+# toggle:end ID=debug
+"#;
+    let sections = scan_sections(Path::new("test.py"), content);
+    let sqlite = sections.iter().find(|s| s.id == "db:sqlite").unwrap();
+    assert_eq!(sqlite.group, "db");
+    assert_eq!(sqlite.variant.as_deref(), Some("sqlite"));
+
+    let debug = sections.iter().find(|s| s.id == "debug").unwrap();
+    assert_eq!(debug.group, "debug");
+    assert_eq!(debug.variant, None);
+}

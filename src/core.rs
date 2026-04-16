@@ -33,6 +33,9 @@ pub struct SectionToggleResult {
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ScanSectionInfo {
     pub id: String,
+    pub group: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub variant: Option<String>,
     pub file: String,
     pub start_line: usize,
     pub end_line: Option<usize>,
@@ -183,8 +186,11 @@ pub fn scan_sections(path: &Path, content: &str) -> Vec<ScanSectionInfo> {
                 "unknown".to_string()
             };
 
+            let (group, variant) = parse_id_parts(&id);
             sections.push(ScanSectionInfo {
                 id,
+                group,
+                variant,
                 file: file_str.clone(),
                 start_line,
                 end_line,
