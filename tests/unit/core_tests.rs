@@ -422,3 +422,100 @@ fn discover_variants_distinguishes_groups() {
         assert_eq!(g, "db");
     }
 }
+
+// ── toggle_variant_group / activate_variant ──
+
+fn comment_style_py() -> toggle::core::CommentStyle {
+    toggle::core::CommentStyle {
+        single_line: "#".to_string(),
+        multi_line_start: None,
+        multi_line_end: None,
+    }
+}
+
+#[test]
+fn toggle_variant_group_pair_flip_swaps_states() {
+    // Initial in fixture: db:sqlite uncommented, db:postgres commented.
+    let result = toggle::core::toggle_variant_group(
+        VARIANTS_FIXTURE,
+        "db",
+        &None,
+        &comment_style_py(),
+    )
+    .unwrap();
+    assert!(result.contains("# import sqlite3"));
+    assert!(result.contains("\nimport psycopg2"));
+}
+
+#[test]
+fn toggle_variant_group_force_on_comments_all() {
+    let result = toggle::core::toggle_variant_group(
+        VARIANTS_FIXTURE,
+        "db",
+        &Some("on".to_string()),
+        &comment_style_py(),
+    )
+    .unwrap();
+    assert!(result.contains("# import sqlite3"));
+    assert!(result.contains("# import psycopg2"));
+}
+
+#[test]
+fn toggle_variant_group_force_off_uncomments_all() {
+    let result = toggle::core::toggle_variant_group(
+        VARIANTS_FIXTURE,
+        "db",
+        &Some("off".to_string()),
+        &comment_style_py(),
+    )
+    .unwrap();
+    assert!(result.contains("\nimport sqlite3"));
+    assert!(result.contains("\nimport psycopg2"));
+}
+
+#[test]
+fn toggle_variant_group_errors_on_three_variants() {
+    let three = r#"
+# toggle:start ID=cache:redis
+x = 1
+# toggle:end ID=cache:redis
+
+# toggle:start ID=cache:memcached
+# y = 2
+# toggle:end ID=cache:memcached
+
+# toggle:start ID=cache:inmemory
+# z = 3
+# toggle:end ID=cache:inmemory
+"#;
+    let err = toggle::core::toggle_variant_group(three, "cache", &None, &comment_style_py())
+        .unwrap_err();
+    let msg = format!("{err}");
+    assert!(msg.contains("3 variants"), "got: {msg}");
+    assert!(msg.contains("cache"));
+}
+
+#[test]
+fn activate_variant_uncomments_target_and_comments_others() {
+    let result = toggle::core::activate_variant(
+        VARIANTS_FIXTURE,
+        "db",
+        "postgres",
+        &comment_style_py(),
+    )
+    .unwrap();
+    assert!(result.contains("\nimport psycopg2"));
+    assert!(result.contains("# import sqlite3"));
+}
+
+#[test]
+fn activate_variant_unknown_variant_errors() {
+    let err = toggle::core::activate_variant(
+        VARIANTS_FIXTURE,
+        "db",
+        "mysql",
+        &comment_style_py(),
+    )
+    .unwrap_err();
+    assert!(format!("{err}").contains("mysql"));
+}

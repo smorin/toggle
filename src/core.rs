@@ -707,3 +707,68 @@ pub fn find_and_toggle_section(
 
     Ok(SectionToggleResult { modified, desc })
 }
+
+/// Toggle every variant of `group` in `content`.
+/// - `force = None` and exactly 2 variants → pair-flip (each variant inverted).
+/// - `force = None` and 1 variant → solo invert (existing per-section behavior).
+/// - `force = None` and 3+ variants → error per PRD §0.13.3.
+/// - `force = Some("on" | "off")` → apply force to every variant regardless of count.
+pub fn toggle_variant_group(
+    content: &str,
+    group: &str,
+    force: &Option<String>,
+    comment_style: &CommentStyle,
+) -> Result<String> {
+    let variants = discover_variants(content, group);
+    if variants.is_empty() {
+        return Err(UsageError(format!("no section or group '{group}' found")).into());
+    }
+    if force.is_none() && variants.len() >= 3 {
+        return Err(UsageError(format!(
+            "group '{group}' has {} variants; specify one with -S {group}:<name>",
+            variants.len()
+        ))
+        .into());
+    }
+
+    let mut lines: Vec<String> = content.lines().map(String::from).collect();
+    for v in &variants {
+        find_and_toggle_section(&mut lines, &v.id, force, comment_style)?;
+    }
+
+    let mut joined = lines.join("\n");
+    if content.ends_with('\n') {
+        joined.push('\n');
+    }
+    Ok(joined)
+}
+
+/// Activate `group:variant`: uncomment that variant, comment every other variant of the group.
+pub fn activate_variant(
+    content: &str,
+    group: &str,
+    variant: &str,
+    comment_style: &CommentStyle,
+) -> Result<String> {
+    let target_id = format!("{group}:{variant}");
+    let variants = discover_variants(content, group);
+    if !variants.iter().any(|s| s.id == target_id) {
+        return Err(UsageError(format!("variant '{target_id}' not found")).into());
+    }
+
+    let mut lines: Vec<String> = content.lines().map(String::from).collect();
+    for v in &variants {
+        let force = if v.id == target_id {
+            Some("off".to_string())
+        } else {
+            Some("on".to_string())
+        };
+        find_and_toggle_section(&mut lines, &v.id, &force, comment_style)?;
+    }
+
+    let mut joined = lines.join("\n");
+    if content.ends_with('\n') {
+        joined.push('\n');
+    }
+    Ok(joined)
+}
