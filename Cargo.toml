@@ -1,11 +1,11 @@
 [package]
 name = "toggle"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 authors = ["Steve Morin"]
 description = "A CLI tool for toggling code comments across multiple languages"
 license = "MIT"
-repository = "https://github.com/stevemorin/toggle"
+repository = "https://github.com/smorin/toggle"
 readme = "README.md"
 
 # Configure binary and library targets
