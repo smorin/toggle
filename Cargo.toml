@@ -13,10 +13,10 @@ readme = "README.md"
 name = "toggle"
 path = "src/main.rs"
 
-# Alias binary — same source, installed alongside `toggle`
+# Alias binary — shares source with `toggle` via include! in src/bin/togl.rs
 [[bin]]
 name = "togl"
-path = "src/main.rs"
+path = "src/bin/togl.rs"
 
 [lib]
 name = "toggle"

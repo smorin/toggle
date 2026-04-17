@@ -108,7 +108,7 @@ toggle --recover --recover-forward   # completes the commit
 - **Shell completions:** `toggle --completions bash > /etc/bash_completion.d/toggle`
   (also `zsh`, `fish`, `powershell`, `elvish`)
 - **Man page:** `toggle --man > toggle.1 && man ./toggle.1`
-- **crates.io:** [`togl`](https://crates.io/crates/togl) — installs the `toggle` binary.
+- **crates.io:** [`togl`](https://crates.io/crates/togl) — installs both `toggle` and `togl` binaries (same behavior under either name).
 - **Homebrew:** not yet published.
 
 ---
