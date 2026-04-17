@@ -8,8 +8,8 @@ deterministic, atomic, language-aware.
 
 ```bash
 cargo install --path .
-# or, once published:
-cargo install toggle
+# or, from crates.io:
+cargo install togl
 ```
 
 Pre-built binaries via Homebrew are not yet published; see the [Distribution](#distribution) section.
@@ -108,7 +108,8 @@ toggle --recover --recover-forward   # completes the commit
 - **Shell completions:** `toggle --completions bash > /etc/bash_completion.d/toggle`
   (also `zsh`, `fish`, `powershell`, `elvish`)
 - **Man page:** `toggle --man > toggle.1 && man ./toggle.1`
-- **crates.io / Homebrew:** not yet published.
+- **crates.io:** [`togl`](https://crates.io/crates/togl) — installs the `toggle` binary.
+- **Homebrew:** not yet published.
 
 ---
 

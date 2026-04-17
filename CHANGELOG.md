@@ -3,6 +3,12 @@
 All notable changes are listed here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [SemVer](https://semver.org/).
 
+## [0.2.2] — 2026-04-16
+
+### Changed
+
+- **Crate renamed `toggle` → `togl`** for crates.io (`toggle` was taken). The installed binary is still `toggle`. Install with `cargo install togl`.
+
 ## [0.2.1] — 2026-04-16
 
 ### Added
@@ -43,5 +49,6 @@ Initial release: line-range and section-based toggling with auto-detected
 comment styles, `--scan` discovery mode, atomic single-file writes, and
 multi-file atomic mode with write-ahead journal recovery.
 
+[0.2.2]: https://github.com/smorin/toggle/releases/tag/v0.2.2
 [0.2.1]: https://github.com/smorin/toggle/releases/tag/v0.2.1
 [0.2.0]: https://github.com/smorin/toggle/releases/tag/v0.2.0
