@@ -42,6 +42,8 @@ sha2 = "0.10"
 signal-hook = "0.3"
 # Cross-platform advisory file locking for concurrent atomic execution prevention
 fd-lock = "4"
+clap_complete = "4"
+clap_mangen = "0.2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # macOS F_FULLFSYNC support for durable fsync

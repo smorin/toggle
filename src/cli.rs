@@ -1,13 +1,13 @@
 // Command-line interface for the Toggle CLI
 
 use clap::Parser;
+use clap_complete::Shell;
 use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(author, version, about)]
 pub struct Cli {
     /// File or directory paths to process
-    #[arg(required = true)]
     pub paths: Vec<PathBuf>,
 
     /// Line range in format <start_line>:<end_line> or <start_line>:+<count> (repeatable)
@@ -123,4 +123,14 @@ pub struct Cli {
     /// Must be combined with --recover.
     #[arg(long = "recover-forward")]
     pub recover_forward: bool,
+
+    /// Generate shell completions for the given shell to stdout.
+    /// Example: `toggle --completions bash > /etc/bash_completion.d/toggle`
+    #[arg(long = "completions", value_name = "SHELL")]
+    pub completions: Option<Shell>,
+
+    /// Generate a roff-formatted man page to stdout.
+    /// Example: `toggle --man > toggle.1 && man ./toggle.1`
+    #[arg(long = "man")]
+    pub man: bool,
 }

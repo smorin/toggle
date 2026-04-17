@@ -119,6 +119,26 @@ fn classify_error(err: &anyhow::Error) -> ExitCode {
 }
 
 fn run(cli: &Cli) -> Result<()> {
+    // ── Meta short-circuits: completions and man page ──
+    if let Some(shell) = cli.completions {
+        let mut command = <Cli as clap::CommandFactory>::command();
+        let bin = command.get_name().to_string();
+        clap_complete::generate(shell, &mut command, bin, &mut std::io::stdout());
+        return Ok(());
+    }
+    if cli.man {
+        let command = <Cli as clap::CommandFactory>::command();
+        clap_mangen::Man::new(command)
+            .render(&mut std::io::stdout())
+            .context("failed to render man page")?;
+        return Ok(());
+    }
+
+    // Path is required for everything else
+    if cli.paths.is_empty() {
+        return Err(UsageError("at least one file or directory path is required".into()).into());
+    }
+
     // ── Atomic mode: startup journal check ──
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let journal_path = cwd.join(journal::JOURNAL_FILENAME);

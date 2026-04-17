@@ -105,9 +105,9 @@ toggle --recover --recover-forward   # completes the commit
 ## Distribution
 
 - **From source:** `cargo install --path .`
-- **Shell completions:** `toggle completions bash > /etc/bash_completion.d/toggle`
+- **Shell completions:** `toggle --completions bash > /etc/bash_completion.d/toggle`
   (also `zsh`, `fish`, `powershell`, `elvish`)
-- **Man page:** `toggle man > toggle.1 && man ./toggle.1`
+- **Man page:** `toggle --man > toggle.1 && man ./toggle.1`
 - **crates.io / Homebrew:** not yet published.
 
 ---

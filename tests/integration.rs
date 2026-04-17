@@ -2079,3 +2079,33 @@ fn check_unclosed_marker_exits_nonzero() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("unclosed"), "stdout: {stdout}");
 }
+
+#[test]
+fn completions_bash_emits_completion_script() {
+    let output = cmd().args(["--completions", "bash"]).output().unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("_toggle()"), "stdout: {stdout}");
+    assert!(stdout.contains("--scan"), "expected flag in completions");
+}
+
+#[test]
+fn man_page_emits_roff() {
+    let output = cmd().args(["--man"]).output().unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains(".TH toggle"),
+        "stdout head: {}",
+        &stdout[..stdout.len().min(200)]
+    );
+    assert!(stdout.contains(".SH NAME"), "expected NAME section");
+}
+
+#[test]
+fn no_paths_errors() {
+    cmd()
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("path is required"));
+}
