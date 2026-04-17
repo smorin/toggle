@@ -1,6 +1,6 @@
 [package]
 name = "togl"
-version = "0.2.2"
+version = "0.2.3"
 edition = "2021"
 authors = ["Steve Morin"]
 description = "A CLI tool for toggling code comments across multiple languages"
@@ -11,6 +11,11 @@ readme = "README.md"
 # Configure binary and library targets
 [[bin]]
 name = "toggle"
+path = "src/main.rs"
+
+# Alias binary — same source, installed alongside `toggle`
+[[bin]]
+name = "togl"
 path = "src/main.rs"
 
 [lib]

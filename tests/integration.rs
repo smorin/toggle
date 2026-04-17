@@ -2109,3 +2109,35 @@ fn no_paths_errors() {
         .failure()
         .stderr(predicate::str::contains("path is required"));
 }
+
+#[allow(deprecated)]
+fn togl_cmd() -> Command {
+    Command::cargo_bin("togl").unwrap()
+}
+
+#[test]
+fn togl_alias_help_self_identifies() {
+    let output = togl_cmd().arg("--help").output().unwrap();
+    assert!(output.status.success(), "togl --help should exit 0");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("Usage: togl"),
+        "expected 'Usage: togl', got: {stdout}"
+    );
+}
+
+#[test]
+fn togl_alias_completions_use_togl_name() {
+    let output = togl_cmd().args(["--completions", "bash"]).output().unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("_togl()"),
+        "expected _togl() in completions, got: {stdout}"
+    );
+}
+
+#[test]
+fn version_exits_zero() {
+    cmd().arg("--version").assert().success();
+}

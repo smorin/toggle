@@ -5,7 +5,7 @@ use clap_complete::Shell;
 use std::path::PathBuf;
 
 #[derive(Parser)]
-#[command(name = "toggle", author, version, about)]
+#[command(author, version, about)]
 pub struct Cli {
     /// File or directory paths to process
     pub paths: Vec<PathBuf>,

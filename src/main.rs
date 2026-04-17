@@ -1,5 +1,4 @@
 use anyhow::{Context, Result};
-use clap::Parser;
 use std::collections::BTreeMap;
 use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
@@ -73,13 +72,42 @@ struct SectionFileEntry {
     end_line: usize,
 }
 
+/// Build the clap `Command` with this binary's name and bin_name overridden.
+/// `env!("CARGO_BIN_NAME")` is set per-bin at compile time, so each binary
+/// (e.g. `toggle`, `togl`) self-identifies in --help, completions, and the
+/// generated man page.
+fn build_command() -> clap::Command {
+    let bin_name = env!("CARGO_BIN_NAME");
+    <Cli as clap::CommandFactory>::command()
+        .name(bin_name)
+        .bin_name(bin_name)
+}
+
 fn main() {
-    let cli = match Cli::try_parse() {
-        Ok(cli) => cli,
+    let mut cmd = build_command();
+    let matches = match cmd.try_get_matches_from_mut(std::env::args_os()) {
+        Ok(m) => m,
         Err(e) => {
-            // Let clap print its error/help message
+            let kind = e.kind();
             let _ = e.print();
-            // Use our custom Usage exit code instead of clap's default (2)
+            // --help and --version are informational, not errors
+            let display_only = matches!(
+                kind,
+                clap::error::ErrorKind::DisplayHelp
+                    | clap::error::ErrorKind::DisplayVersion
+                    | clap::error::ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand
+            );
+            std::process::exit(if display_only {
+                0
+            } else {
+                ExitCode::Usage.code()
+            });
+        }
+    };
+    let cli = match <Cli as clap::FromArgMatches>::from_arg_matches(&matches) {
+        Ok(c) => c,
+        Err(e) => {
+            let _ = e.print();
             std::process::exit(ExitCode::Usage.code());
         }
     };
@@ -121,13 +149,13 @@ fn classify_error(err: &anyhow::Error) -> ExitCode {
 fn run(cli: &Cli) -> Result<()> {
     // ── Meta short-circuits: completions and man page ──
     if let Some(shell) = cli.completions {
-        let mut command = <Cli as clap::CommandFactory>::command();
+        let mut command = build_command();
         let bin = command.get_name().to_string();
         clap_complete::generate(shell, &mut command, bin, &mut std::io::stdout());
         return Ok(());
     }
     if cli.man {
-        let command = <Cli as clap::CommandFactory>::command();
+        let command = build_command();
         clap_mangen::Man::new(command)
             .render(&mut std::io::stdout())
             .context("failed to render man page")?;
