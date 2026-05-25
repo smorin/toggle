@@ -1,4 +1,4 @@
-use toggle::io::{detect_protected_lines, is_symlink, normalize_eol, read_file_encoded};
+use toggle_lib::io::{detect_protected_lines, is_symlink, normalize_eol, read_file_encoded};
 
 #[test]
 fn test_detect_shebang() {

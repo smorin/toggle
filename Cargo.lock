@@ -896,7 +896,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "togl"
+name = "toggle-cli"
 version = "0.2.3"
 dependencies = [
  "anyhow",
@@ -905,14 +905,26 @@ dependencies = [
  "clap_complete",
  "clap_mangen",
  "criterion",
- "encoding_rs",
- "fd-lock",
- "libc",
  "predicates",
  "serde",
  "serde_json",
- "sha2",
  "signal-hook",
+ "tempfile",
+ "toggle-lib",
+]
+
+[[package]]
+name = "toggle-lib"
+version = "0.2.3"
+dependencies = [
+ "anyhow",
+ "criterion",
+ "encoding_rs",
+ "fd-lock",
+ "libc",
+ "serde",
+ "serde_json",
+ "sha2",
  "similar",
  "tempfile",
  "toml",

@@ -1,75 +1,16 @@
-[package]
-name = "togl"
+[workspace]
+members = ["crates/toggle-lib", "crates/toggle-cli"]
+resolver = "2"
+
+[workspace.package]
 version = "0.2.3"
 edition = "2021"
 authors = ["Steve Morin"]
-description = "A CLI tool for toggling code comments across multiple languages"
 license = "MIT"
 repository = "https://github.com/smorin/toggle"
 readme = "README.md"
 
-# Configure binary and library targets
-[[bin]]
-name = "toggle"
-path = "src/main.rs"
-
-# Alias binary — shares source with `toggle` via include! in src/bin/togl.rs
-[[bin]]
-name = "togl"
-path = "src/bin/togl.rs"
-
-[lib]
-name = "toggle"
-path = "src/lib.rs"
-
-[dependencies]
-# CLI argument parsing
-clap = { version = "4.4", features = ["derive"] }
-# Error handling
+[workspace.dependencies]
 anyhow = "1.0"
-# File path manipulation
-walkdir = "2.4"
-# Temporary file handling
-tempfile = "3.8"
-# Diff generation for --dry-run
-similar = "2"
-# Config file parsing
-toml = "0.8"
-# Serialization/deserialization
 serde = { version = "1", features = ["derive"] }
-# JSON output
-serde_json = "1"
-# Encoding support
-encoding_rs = "0.8"
-# SHA-256 checksums for atomic journal integrity
-sha2 = "0.10"
-# Signal handling for graceful interrupt during atomic commits
-signal-hook = "0.3"
-# Cross-platform advisory file locking for concurrent atomic execution prevention
-fd-lock = "4"
-clap_complete = "4"
-clap_mangen = "0.2"
-
-[target.'cfg(target_os = "macos")'.dependencies]
-# macOS F_FULLFSYNC support for durable fsync
-libc = "0.2"
-
-[package.metadata.cargo-semver-checks.lints]
-constructible_struct_adds_field = "allow"
-
-[dev-dependencies]
-# For benchmarking
-criterion = "0.5"
-# For CLI testing
-assert_cmd = "2.0"
-predicates = "3.0"
-
-# Configure benchmarks
-[[bench]]
-name = "toggle_bench"
-harness = false
-
-# Feature flags
-[features]
-default = []
-extended-logging = []
+tempfile = "3.8"
