@@ -575,7 +575,7 @@ In `PROJECTS.md`, after the P04 block, add:
 ```markdown
 ---
 
-## [-] Project P05: `--insert` Marker Insertion (vNEXT)
+## [-] Project P05: `--insert` Marker Insertion (v0.3.0)
 **Goal**: Add a `--insert` mode that wraps a single file's `-l start:end` block
 in a `toggle:start`/`toggle:end` marker pair, leaving the body uncommented.
 See `docs/superpowers/specs/2026-05-29-marker-insert-strip-list-filters-design.md`.
@@ -588,8 +588,10 @@ See `docs/superpowers/specs/2026-05-29-marker-insert-strip-list-filters-design.m
 - [ ] [P05-T05] README + PROJECTS.md + `just dev`
 ```
 
-> Replace `vNEXT` with the version the user chooses at the execution handoff
-> (its own minor version, or bundled with P06/P07 — see the plan's handoff note).
+> P05 ships as its own minor version **v0.3.0**. Version bumping/tagging is
+> handled by **release-please** from the Conventional Commit messages in this
+> plan (`feat(core):` / `feat(cli):` → minor bump) — there is no manual
+> version-bump or `git tag` step in this plan.
 
 - [ ] **Step 3: Run the full dev cycle**
 
