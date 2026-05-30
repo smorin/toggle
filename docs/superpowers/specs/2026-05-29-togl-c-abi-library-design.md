@@ -22,55 +22,52 @@ filesystem operations cross the C boundary.
 |---|---|
 | Purpose | General-purpose: external C consumers **and** the core for future Python/TS bindings |
 | API scope | String core (transforms) + read-only introspection (JSON results) |
-| Crate structure | **Virtual Cargo workspace** at repo root; existing crate moves to `crates/togl/`; new `crates/togl-ffi/` produces `libtogl` |
+| Crate structure | Workspace already exists (PR #22, crates renamed to `togl-lib` + `togl-cli`). Add `crates/togl-ffi/` (package `togl-ffi`, `[lib] name = "togl"`) depending on `togl-lib`; produces `libtogl` |
 | Header generation | **cbindgen** at build time, **and** the generated header is committed to the repo |
-| nixpkgs packaging | C library is a **separate** nixpkgs package (`libtogl`), landing **after** the CLI (`togl`) PR |
+| nixpkgs packaging | C library is a **separate** nixpkgs package (`libtogl`), landing **after** the CLI (`togl-cli`) PR |
 
 ## 3. Architecture
 
-### 3.1 Virtual workspace migration
+### 3.1 Workspace integration (no migration — the workspace already exists)
 
-Root `Cargo.toml` becomes a **virtual workspace manifest** (only `[workspace]`, no `[package]`).
-The current single crate moves into a member directory; a second member provides the C ABI.
+PR #22 already converted the repo to a virtual Cargo workspace, and the crates were subsequently
+renamed to the `togl-*` convention. The existing layout is:
+
+- `crates/togl-lib/` — package `togl-lib`, `[lib] name = "togl_lib"` — all core logic
+- `crates/togl-cli/` — package `togl-cli`, binaries `toggle` and `togl`, depends on `togl-lib`
+- root `Cargo.toml` — virtual workspace with `[workspace.package]` / `[workspace.dependencies]` inheritance
+
+This design adds a **third member**, `crates/togl-ffi/`, depending on `togl-lib` and exposing the
+C ABI. No migration of existing code is required.
 
 ```
-toggle/                       # repo root = virtual workspace
-├── Cargo.toml                # [workspace] members = ["crates/togl", "crates/togl-ffi"]
-├── Cargo.lock                # STAYS at root (workspace lockfile)
-├── README.md, Justfile, Makefile, lefthook.yml, deny.toml, CHANGELOG.md  # repo-level, stay
+toggle/                       # repo root = existing virtual workspace (PR #22)
+├── Cargo.toml                # members = ["crates/togl-lib", "crates/togl-cli", "crates/togl-ffi"]
+├── Cargo.lock
 ├── crates/
-│   ├── togl/                 # the existing crate, moved verbatim
-│   │   ├── Cargo.toml        # [package] name="togl"; [lib] toggle; [[bin]] toggle, togl
-│   │   ├── src/              # moved from ./src
-│   │   ├── tests/            # moved from ./tests
-│   │   └── benches/          # moved from ./benches
-│   └── togl-ffi/             # NEW C ABI crate → libtogl
-│       ├── Cargo.toml        # crate-type = ["staticlib","cdylib"]; deps: toggle = { path = "../togl" }
+│   ├── togl-lib/             # EXISTING — core library (lib name togl_lib)
+│   ├── togl-cli/             # EXISTING — CLI (bins toggle, togl)
+│   └── togl-ffi/             # NEW — C ABI crate → libtogl
+│       ├── Cargo.toml        # package "togl-ffi"; [lib] name="togl", crate-type=["staticlib","cdylib"]; deps: togl-lib = { path = "../togl-lib" }
 │       ├── build.rs          # runs cbindgen → include/togl.h
 │       ├── cbindgen.toml
 │       ├── include/togl.h    # generated AND committed
-│       └── src/lib.rs        # extern "C" surface
+│       └── src/lib.rs        # extern "C" surface (wraps togl_lib::core::*)
 ```
 
-### 3.2 Migration touchpoints (must be updated as part of the move)
+### 3.2 Integration touchpoints (small — the workspace work is already done)
 
-- **Justfile:** `cargo run -- {{args}}` and `cargo run --release -- {{args}}` become ambiguous in a
-  multi-package workspace → add `-p togl` (or `--bin toggle`). Other recipes (`cargo fmt --all`,
-  `cargo test`, `cargo build`, `cargo clippy`) are workspace-aware and unaffected.
-- **In-flight nixpkgs `pkgs/by-name/to/togl/package.nix`:** `src` is now a workspace root, so add
-  `cargoBuildFlags = [ "-p" "togl" ]` (and `cargoTestFlags`/`buildAndTestSubdir` as needed) so it
-  builds only the CLI package. `cargoHash` will change (workspace `Cargo.lock`).
-- **crates.io publishing:** `togl` now publishes from `crates/togl/`. The crate's `readme`/`license`
-  paths are relative to the crate dir; verify `readme = "README.md"` still resolves (move a copy
-  into the crate, or point at the repo README via included file). Confirm `cargo publish -p togl`.
-- **Release workflow (`.github/workflows/release.yml`) and CI (`ci.yml`, `audit.yml`):** verify any
-  hardcoded `src/` / manifest paths; update to workspace-aware invocations.
-- **PROJECTS.md:** add a project entry for this work (per repo convention).
+- **Root `Cargo.toml`:** add `"crates/togl-ffi"` to `members`.
+- **In-flight nixpkgs derivation (parked):** the CLI package is now `togl-cli`, so the nixpkgs CLI
+  build needs `cargoBuildFlags = [ "-p" "togl-cli" ]`, and the C-library package builds `-p togl-ffi`.
+  Handled when the nixpkgs PR resumes — not part of this crate's work.
+- No Justfile / readme / crates.io migration work is needed here — PR #22 already settled the workspace.
 
 ### 3.3 `togl-ffi` crate
 
-- Depends on `toggle` (the moved lib) via path dependency.
-- `crate-type = ["staticlib", "cdylib"]` → emits `libtogl.a` and `libtogl.so`/`.dylib`.
+- Package `togl-ffi`; `[lib] name = "togl"`, so the artifact is `libtogl.a` / `libtogl.so` / `libtogl.dylib`.
+- Depends on `togl-lib = { path = "../togl-lib" }`; the FFI code calls `togl_lib::core::*`.
+- `crate-type = ["staticlib", "cdylib"]`.
 - All exposed symbols prefixed `togl_`.
 - `build.rs` invokes cbindgen to (re)generate `include/togl.h`; the file is also committed so
   non-Nix consumers and code review see the C API without building.
@@ -174,8 +171,8 @@ typedef struct { size_t start; size_t end; } ToglRange;  // frozen POD, never ch
 
 ## 11. Risks / open items for the plan
 
-- Confirm `cargo publish -p togl` still works from the workspace (readme/license path resolution).
 - Decide exact `force_mode` and `check_level` integer encodings (stable enums) during planning.
 - Confirm macOS `SONAME`/install-name handling for the `.dylib` in both flake and nixpkgs builds.
-- Verify the in-flight nixpkgs CLI PR is updated for the workspace `src` before it merges, so the
-  two PRs stay consistent.
+- The in-flight nixpkgs CLI derivation predates PR #22's rename — when that PR resumes it must build
+  `-p togl-cli` (not `-p togl`), and the C-library package builds `-p togl-ffi`. Parked, not part of
+  this crate's work.
