@@ -38,6 +38,8 @@ fn c_program_links_and_runs() {
     let status = cmd.status().expect("failed to invoke C compiler");
     assert!(status.success(), "C compile/link failed");
 
-    let run = Command::new(&exe).status().expect("failed to run smoke test");
+    let run = Command::new(&exe)
+        .status()
+        .expect("failed to run smoke test");
     assert!(run.success(), "C smoke test returned failure");
 }

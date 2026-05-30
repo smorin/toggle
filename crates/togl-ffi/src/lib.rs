@@ -101,8 +101,7 @@ mod tests {
         let content = CString::new("a\nb\nc\n").unwrap();
         let ranges = [ToglRange { start: 1, end: 2 }];
         let mut out: *mut c_char = std::ptr::null_mut();
-        let rc =
-            togl_toggle_comments(content.as_ptr(), ranges.as_ptr(), ranges.len(), 1, &mut out);
+        let rc = togl_toggle_comments(content.as_ptr(), ranges.as_ptr(), ranges.len(), 1, &mut out);
         assert_eq!(rc, 0);
         let s = unsafe { CStr::from_ptr(out) }.to_str().unwrap().to_owned();
         assert!(s.contains("# a"), "got: {s}");

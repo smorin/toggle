@@ -65,8 +65,10 @@ pub extern "C" fn togl_validate_sections(
     guard(|| {
         let content = borrow_str(content)?;
         let sections = scan_sections(Path::new("<ffi>"), content);
-        let issues =
-            validate_sections(&[(std::path::PathBuf::from("<ffi>"), sections)], pair_only != 0);
+        let issues = validate_sections(
+            &[(std::path::PathBuf::from("<ffi>"), sections)],
+            pair_only != 0,
+        );
         out_string(to_json(&issues)?, out_json)
     })
 }
