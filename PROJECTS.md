@@ -130,7 +130,7 @@ See `docs/superpowers/specs/2026-05-29-marker-insert-strip-list-filters-design.m
 > **Note:** The marker roadmap (P05–P07) is complete. The C ABI library is
 > numbered P08; release automation P09.
 
-## [x] Project P06: `--remove` (recursive strip, three modes) (v0.6.0)
+## [x] Project P06: `--remove` (recursive strip, three modes) (v0.5.0)
 **Goal**: Add `--remove -S <ID>` to strip a named section, recursively with `-R`.
 `--remove-mode markers|commented|all` (default `commented`): `markers` deletes
 only the marker lines; `commented` also deletes fully-commented body lines but
