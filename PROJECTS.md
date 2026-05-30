@@ -227,3 +227,38 @@ See `docs/superpowers/specs/2026-05-29-release-please-commitlint-design.md`.
 
 ### Manual Steps (maintainer)
 - Add `RELEASE_PLEASE_APP_ID` + `RELEASE_PLEASE_PRIVATE_KEY` (GitHub App) or `RELEASE_PLEASE_APP_TOKEN` (PAT) secrets.
+
+---
+
+## [~] Project P10: CLI ergonomics refactor (v0.5.0)
+**Goal**: Make the CLI more ergonomic without breaking the existing flat-flag
+interface. Three additive layers, shipped in order:
+1. **Declarative clap constraints** — replace hand-rolled flag-combination
+   checks with clap `group`/`requires`, so impossible combinations fail at parse
+   time with consistent messages.
+2. **Subcommands** — `toggle`/`scan`/`check`/`list`/`insert`/`remove` expose
+   only the flags that apply to each operation. *Additive*: the legacy flat
+   flags remain; each subcommand translates to the equivalent legacy argv and is
+   re-parsed through the same pipeline, so the two forms cannot drift. The legacy
+   form emits a TTY-only deprecation nudge.
+3. **stdin/stdout filter** — accept `-`/stdin and write to stdout so `togl`
+   composes as a Unix filter.
+
+**Out of Scope**
+- Removing the flat-flag interface (deprecate only; removal is a future major).
+- A `recover` subcommand (the rare `--recover` path stays flat-flag only).
+
+### Tests & Tasks
+- [x] [P10-T01] Option 2: `operation` arg-group + `requires` constraints in `cli.rs`
+- [x] [P10-T02] Option 1: `Commands` subcommand enum + `GlobalArgs` flatten struct
+- [x] [P10-T03] Option 1: `Commands::to_legacy_argv` translation (clap owns defaults)
+- [x] [P10-T04] Option 1: `main()` subcommand bridge + TTY-only deprecation notice
+- [x] [P10-TS01] Parity tests: each subcommand ≡ its flat-flag form (incl. a
+      defaulted `--remove-mode` case to guard default drift); scoping + help/man render
+- [ ] [P10-T05] Option 3: stdin/stdout filter support
+- [ ] [P10-TS02] Option 3: filter round-trip + `-`-as-path tests
+
+### Automated Verification
+- `cargo test` green (all parity + existing suites)
+- `cargo clippy --all-targets -- -D warnings` clean
+- `togl --help` / `--man` / `--completions` render the subcommands under the aliased bin name

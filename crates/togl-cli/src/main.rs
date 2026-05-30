@@ -84,9 +84,16 @@ fn build_command() -> clap::Command {
         .bin_name(bin_name)
 }
 
-fn main() {
+/// Parse argv through the canonical clap command, exiting the process on a
+/// parse error (mirroring clap's default behavior, but routed through our
+/// custom `build_command()` so binary-name aliasing is preserved).
+fn parse_cli<I, T>(argv: I) -> Cli
+where
+    I: IntoIterator<Item = T>,
+    T: Into<std::ffi::OsString> + Clone,
+{
     let mut cmd = build_command();
-    let matches = match cmd.try_get_matches_from_mut(std::env::args_os()) {
+    let matches = match cmd.try_get_matches_from_mut(argv) {
         Ok(m) => m,
         Err(e) => {
             let kind = e.kind();
@@ -105,12 +112,31 @@ fn main() {
             });
         }
     };
-    let cli = match <Cli as clap::FromArgMatches>::from_arg_matches(&matches) {
+    match <Cli as clap::FromArgMatches>::from_arg_matches(&matches) {
         Ok(c) => c,
         Err(e) => {
             let _ = e.print();
             std::process::exit(ExitCode::Usage.code());
         }
+    }
+}
+
+fn main() {
+    let raw: Vec<std::ffi::OsString> = std::env::args_os().collect();
+    let parsed = parse_cli(raw.iter().cloned());
+
+    // ── Subcommand bridge ──
+    // A subcommand is an ergonomic front-end: translate it to the equivalent
+    // legacy argv and re-parse through the same path, yielding a flat `Cli`
+    // (command = None) that the existing pipeline handles unchanged. The legacy
+    // flat-flag form emits a one-line deprecation nudge (humans only).
+    let cli = if let Some(command) = &parsed.command {
+        let bin = raw.first().cloned().unwrap_or_else(|| "togl".into());
+        let legacy_argv = command.to_legacy_argv(bin);
+        parse_cli(legacy_argv)
+    } else {
+        maybe_warn_legacy(&parsed);
+        parsed
     };
 
     let result = run(&cli);
@@ -131,6 +157,21 @@ fn main() {
         code.code()
     };
     std::process::exit(exit_val);
+}
+
+/// Emit a one-line deprecation nudge toward the subcommand form when the legacy
+/// flat-flag interface is used interactively. Suppressed in machine contexts
+/// (`--json`, non-TTY stderr) and for meta/no-op invocations so it never
+/// pollutes scripts, pipes, or generated output.
+fn maybe_warn_legacy(cli: &Cli) {
+    let meta = cli.completions.is_some() || cli.man;
+    if cli.json || meta || cli.paths.is_empty() || !std::io::stderr().is_terminal() {
+        return;
+    }
+    eprintln!(
+        "note: flat-flag usage is deprecated; prefer subcommands \
+         (toggle/scan/check/list/insert/remove). See `--help`."
+    );
 }
 
 fn classify_error(err: &anyhow::Error) -> ExitCode {
