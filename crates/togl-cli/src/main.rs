@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 mod cli;
-use cli::Cli;
+use cli::{Cli, ListFields};
 use togl_lib::config::ToggleConfig;
 use togl_lib::core;
 use togl_lib::exit_codes::{ExitCode, UsageError};
@@ -295,6 +295,9 @@ fn run(cli: &Cli) -> Result<()> {
     }
     if cli.list_sections && cli.force.is_some() {
         return Err(UsageError("--list-sections cannot be combined with --force".into()).into());
+    }
+    if cli.fields != ListFields::Lines && !cli.list_sections {
+        return Err(UsageError("--fields requires --list-sections".into()).into());
     }
 
     // Validate --eol value
@@ -841,8 +844,21 @@ fn run_list_sections(cli: &Cli, opts: &ToggleOptions) -> Result<()> {
             } else {
                 println!("{}", id);
             }
-            for (file, start, end) in locations {
-                println!("  {}:{}-{}", file, start, end);
+            match cli.fields {
+                ListFields::Ids => {}
+                ListFields::Files => {
+                    let mut seen = std::collections::HashSet::new();
+                    for (file, _, _) in locations {
+                        if seen.insert(file) {
+                            println!("  {}", file);
+                        }
+                    }
+                }
+                ListFields::Lines => {
+                    for (file, start, end) in locations {
+                        println!("  {}:{}-{}", file, start, end);
+                    }
+                }
             }
         }
     }

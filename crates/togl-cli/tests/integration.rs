@@ -1269,6 +1269,135 @@ fn test_list_sections_conflicts_with_force_flag() {
         ));
 }
 
+// ── P07: --list-sections --fields <ids|files|lines> ──
+
+// feat1 appears in two files (a.py + sub/c.py); feat2 in one (b.py).
+fn list_fields_fixture() -> tempfile::TempDir {
+    setup_temp_dir_with_files(&[
+        (
+            "a.py",
+            "# toggle:start ID=feat1 desc=\"Feature one\"\nhello\n# toggle:end ID=feat1\n",
+        ),
+        (
+            "b.py",
+            "# toggle:start ID=feat2\nworld\n# toggle:end ID=feat2\n",
+        ),
+        (
+            "sub/c.py",
+            "# toggle:start ID=feat1\nfoo\n# toggle:end ID=feat1\n",
+        ),
+    ])
+}
+
+#[test]
+fn test_list_sections_fields_ids() {
+    let dir = list_fields_fixture();
+    let output = cmd()
+        .args([
+            dir.path().to_str().unwrap(),
+            "-R",
+            "--list-sections",
+            "--fields",
+            "ids",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("feat1") && stdout.contains("feat2"));
+    assert!(stdout.contains("Feature one"), "ids keeps descriptions");
+    assert!(
+        !stdout.contains(".py"),
+        "ids mode must not show file paths: {stdout}"
+    );
+}
+
+#[test]
+fn test_list_sections_fields_files() {
+    let dir = list_fields_fixture();
+    let output = cmd()
+        .args([
+            dir.path().to_str().unwrap(),
+            "-R",
+            "--list-sections",
+            "--fields",
+            "files",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("a.py") && stdout.contains("c.py"));
+    assert!(
+        !stdout.contains(":1-"),
+        "files mode must not show line numbers: {stdout}"
+    );
+}
+
+#[test]
+fn test_list_sections_fields_lines_is_default() {
+    let dir = list_fields_fixture();
+    let default_out = cmd()
+        .args([dir.path().to_str().unwrap(), "-R", "--list-sections"])
+        .output()
+        .unwrap();
+    let explicit_out = cmd()
+        .args([
+            dir.path().to_str().unwrap(),
+            "-R",
+            "--list-sections",
+            "--fields",
+            "lines",
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(
+        default_out.stdout, explicit_out.stdout,
+        "lines is the default (output unchanged)"
+    );
+    let stdout = String::from_utf8(default_out.stdout).unwrap();
+    assert!(
+        stdout.contains(":1-"),
+        "lines mode shows file:start-end: {stdout}"
+    );
+}
+
+#[test]
+fn test_list_sections_fields_requires_list_sections() {
+    let dir = setup_temp_dir_with_files(&[("a.py", "hello\n")]);
+    cmd()
+        .args([dir.path().join("a.py").to_str().unwrap(), "--fields", "ids"])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains(
+            "--fields requires --list-sections",
+        ));
+}
+
+#[test]
+fn test_list_sections_json_ignores_fields() {
+    let dir = list_fields_fixture();
+    let output = cmd()
+        .args([
+            dir.path().to_str().unwrap(),
+            "-R",
+            "--list-sections",
+            "--fields",
+            "ids",
+            "--json",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert!(v.is_array());
+    assert!(
+        stdout.contains("start_line"),
+        "--json keeps the full structure regardless of --fields: {stdout}"
+    );
+}
+
 // ── Cross-file JSON output ──
 
 #[test]
