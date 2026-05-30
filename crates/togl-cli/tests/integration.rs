@@ -74,7 +74,9 @@ fn test_to_end_without_line_errors() {
         .args([path.to_str().unwrap(), "--to-end"])
         .assert()
         .failure()
-        .stderr(predicates::str::contains("--to-end requires"));
+        .stderr(predicates::str::contains(
+            "required arguments were not provided",
+        ));
 }
 
 // ── Multi-line comment support (Phase 2) ──
@@ -1721,7 +1723,7 @@ fn test_no_backup_without_atomic_errors() {
         .assert()
         .failure()
         .stderr(predicates::str::contains(
-            "--no-backup is only valid with --atomic",
+            "required arguments were not provided",
         ));
 }
 
@@ -1739,7 +1741,7 @@ fn test_recover_forward_without_recover_errors() {
         .assert()
         .failure()
         .stderr(predicates::str::contains(
-            "--recover-forward requires --recover",
+            "required arguments were not provided",
         ));
 }
 
@@ -2457,7 +2459,9 @@ fn check_without_scan_errors() {
         .args(["--check", dir.path().to_str().unwrap()])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("--check requires --scan"));
+        .stderr(predicate::str::contains(
+            "required arguments were not provided",
+        ));
 }
 
 #[test]
