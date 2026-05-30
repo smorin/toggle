@@ -17,10 +17,21 @@ fn c_program_links_and_runs() {
         .and_then(|p| p.parent())
         .expect("target/<profile> dir");
     let lib = profile_dir.join("libtogl.a");
-    assert!(
-        lib.exists(),
-        "static lib not found at {lib:?} — run `cargo build -p togl-ffi` first"
-    );
+    // `cargo test` builds only the rlib needed to run unit tests, not the
+    // staticlib/cdylib artifacts. Produce `libtogl.a` explicitly if absent so
+    // this test is self-sufficient under a bare `cargo test` (as CI runs it).
+    if !lib.exists() {
+        let mut args = vec!["build", "-p", "togl-ffi"];
+        if profile_dir.file_name().and_then(|n| n.to_str()) == Some("release") {
+            args.push("--release");
+        }
+        let status = Command::new(env!("CARGO"))
+            .args(&args)
+            .status()
+            .expect("failed to run cargo build for libtogl");
+        assert!(status.success(), "cargo build -p togl-ffi failed");
+    }
+    assert!(lib.exists(), "static lib still not found at {lib:?}");
 
     let exe = std::env::temp_dir().join("togl_c_smoke_bin");
     let cc = std::env::var("CC").unwrap_or_else(|_| "cc".to_string());

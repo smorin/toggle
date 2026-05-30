@@ -14,6 +14,9 @@ allow = [
   "ISC",
   "Unicode-3.0",
   "Unicode-DFS-2016",
+  # cbindgen (build-time C-header generator for togl-ffi) is MPL-2.0; it is a
+  # build tool and is not linked into shipped artifacts.
+  "MPL-2.0",
 ]
 
 [bans]
