@@ -1997,6 +1997,96 @@ fn scan_json_emits_nested_tree() {
     assert_eq!(cache["variants"].as_array().unwrap().len(), 3);
 }
 
+// ── --insert (P05) ──
+
+#[test]
+fn test_insert_basic() {
+    let (_dir, path) = setup_temp_file("a\nb\nc\nd\n", "test.py");
+    cmd()
+        .args([path.to_str().unwrap(), "--insert", "-S", "feat", "-l", "2:3"])
+        .assert()
+        .success();
+    let result = fs::read_to_string(&path).unwrap();
+    assert_eq!(
+        result,
+        "a\n# toggle:start ID=feat\nb\nc\n# toggle:end ID=feat\nd\n"
+    );
+}
+
+#[test]
+fn test_insert_with_desc() {
+    let (_dir, path) = setup_temp_file("a\nb\n", "test.py");
+    cmd()
+        .args([
+            path.to_str().unwrap(),
+            "--insert",
+            "-S",
+            "feat",
+            "-l",
+            "1:2",
+            "--desc",
+            "my note",
+        ])
+        .assert()
+        .success();
+    let result = fs::read_to_string(&path).unwrap();
+    assert_eq!(
+        result,
+        "# toggle:start ID=feat desc=\"my note\"\na\nb\n# toggle:end ID=feat\n"
+    );
+}
+
+#[test]
+fn test_insert_round_trips_through_scan() {
+    let (_dir, path) = setup_temp_file("a\nb\nc\n", "test.py");
+    cmd()
+        .args([path.to_str().unwrap(), "--insert", "-S", "feat", "-l", "1:2"])
+        .assert()
+        .success();
+    cmd()
+        .args([path.to_str().unwrap(), "--scan"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("feat"));
+}
+
+#[test]
+fn test_insert_rejects_duplicate_id() {
+    let (_dir, path) =
+        setup_temp_file("# toggle:start ID=feat\nx\n# toggle:end ID=feat\ny\n", "test.py");
+    cmd()
+        .args([path.to_str().unwrap(), "--insert", "-S", "feat", "-l", "4:4"])
+        .assert()
+        .failure();
+}
+
+#[test]
+fn test_insert_requires_single_section() {
+    let (_dir, path) = setup_temp_file("a\nb\n", "test.py");
+    cmd()
+        .args([
+            path.to_str().unwrap(),
+            "--insert",
+            "-S",
+            "a",
+            "-S",
+            "b",
+            "-l",
+            "1:2",
+        ])
+        .assert()
+        .failure();
+}
+
+#[test]
+fn test_insert_rejects_recursive() {
+    let (_dir, path) = setup_temp_file("a\nb\n", "test.py");
+    cmd()
+        .args([path.to_str().unwrap(), "--insert", "-S", "feat", "-l", "1:2", "-R"])
+        .assert()
+        .failure();
+}
+
 #[test]
 fn scan_detailed_view_for_specific_variant() {
     let dir = TempDir::new().unwrap();
