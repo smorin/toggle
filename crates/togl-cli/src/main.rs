@@ -193,12 +193,8 @@ fn run(cli: &Cli) -> Result<()> {
     if cli.atomic && cli.dry_run {
         return Err(UsageError("--atomic cannot be combined with --dry-run.".into()).into());
     }
-    if cli.no_backup && !cli.atomic {
-        return Err(UsageError("--no-backup is only valid with --atomic.".into()).into());
-    }
-    if cli.recover_forward && !cli.recover {
-        return Err(UsageError("--recover-forward requires --recover.".into()).into());
-    }
+    // --no-backup requires --atomic, --recover-forward requires --recover:
+    // enforced declaratively in cli.rs via clap `requires`.
     // Note: --atomic --stdout is not applicable (no --stdout flag exists yet)
     // Note: --atomic --in-place is not applicable (no --in-place flag exists yet)
 
@@ -249,9 +245,7 @@ fn run(cli: &Cli) -> Result<()> {
     // Handle --scan mode early (read-only, no toggle options needed).
     // Per PRD §0.14.2, --scan -S <id> is the detailed group view, so --section is allowed here.
     if cli.scan {
-        if cli.insert {
-            return Err(UsageError("--scan cannot be combined with --insert".into()).into());
-        }
+        // --scan vs --insert: enforced by the `operation` arg-group in cli.rs.
         if !cli.lines.is_empty() {
             return Err(UsageError("--scan cannot be combined with --line".into()).into());
         }
@@ -261,9 +255,7 @@ fn run(cli: &Cli) -> Result<()> {
         return run_scan(cli);
     }
 
-    if cli.check && !cli.scan {
-        return Err(UsageError("--check requires --scan".into()).into());
-    }
+    // --check requires --scan: enforced declaratively in cli.rs via clap `requires`.
 
     // Validate --comment-style: must be 1 or 3 values
     if cli.comment_style.len() == 2 {
@@ -273,10 +265,7 @@ fn run(cli: &Cli) -> Result<()> {
         .into());
     }
 
-    // Validate --to-end requires --line
-    if cli.to_end && cli.lines.is_empty() {
-        return Err(UsageError("--to-end requires at least one --line range".into()).into());
-    }
+    // --to-end requires --line: enforced declaratively in cli.rs via clap `requires`.
 
     // Validate --pair: pre-execution guard per PRD §0.13.4
     if cli.pair {
@@ -301,14 +290,10 @@ fn run(cli: &Cli) -> Result<()> {
     }
     // --remove validation (P06)
     if cli.remove {
+        // Mutual exclusion with other modes (--insert/--list-sections/--scan) is
+        // enforced by the `operation` arg-group in cli.rs.
         if cli.sections.len() != 1 {
             return Err(UsageError("--remove requires exactly one -S <ID>".into()).into());
-        }
-        if cli.insert || cli.list_sections || cli.scan {
-            return Err(UsageError(
-                "--remove cannot be combined with --insert, --list-sections, or --scan".into(),
-            )
-            .into());
         }
         if cli.atomic {
             return Err(UsageError("--remove cannot be combined with --atomic".into()).into());
@@ -329,11 +314,8 @@ fn run(cli: &Cli) -> Result<()> {
 
     // ── --insert mode validation (P05) ──
     if cli.insert {
-        if cli.list_sections {
-            return Err(
-                UsageError("--insert cannot be combined with --list-sections".into()).into(),
-            );
-        }
+        // Mutual exclusion with --list-sections (and other modes) is enforced by
+        // the `operation` arg-group in cli.rs.
         if cli.force.is_some() {
             return Err(UsageError(
                 "--insert does not take --force (the body is left uncommented)".into(),
@@ -357,9 +339,8 @@ fn run(cli: &Cli) -> Result<()> {
         if cli.lines.len() != 1 {
             return Err(UsageError("--insert requires exactly one -l <range>".into()).into());
         }
-    } else if cli.desc.is_some() {
-        return Err(UsageError("--desc is only valid with --insert".into()).into());
     }
+    // --desc requires --insert: enforced declaratively in cli.rs via clap `requires`.
 
     let opts = ToggleOptions {
         force: &effective_force,

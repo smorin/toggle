@@ -47,7 +47,7 @@ pub struct Cli {
     pub recursive: bool,
 
     /// List all section IDs found in files (discovery mode, no toggling)
-    #[arg(long = "list-sections")]
+    #[arg(long = "list-sections", group = "operation")]
     pub list_sections: bool,
 
     /// Detail level for --list-sections text output [default: lines]
@@ -55,7 +55,7 @@ pub struct Cli {
     pub fields: ListFields,
 
     /// Remove a named section (requires -S <ID>). Recursive with -R. See --remove-mode.
-    #[arg(long = "remove")]
+    #[arg(long = "remove", group = "operation")]
     pub remove: bool,
 
     /// What --remove strips: markers | commented | all [default: commented]
@@ -63,16 +63,16 @@ pub struct Cli {
     pub remove_mode: RemoveMode,
 
     /// With --remove, exit non-zero if -S <ID> matched no sections.
-    #[arg(long = "require-match")]
+    #[arg(long = "require-match", requires = "remove")]
     pub require_match: bool,
 
     /// Insert a toggle:start/end marker pair around a single -l range (single file).
     /// Requires exactly one -S <ID> and one -l <range>. Leaves the body uncommented.
-    #[arg(long = "insert")]
+    #[arg(long = "insert", group = "operation")]
     pub insert: bool,
 
     /// Description for the inserted section marker (use with --insert).
-    #[arg(long = "desc")]
+    #[arg(long = "desc", requires = "insert")]
     pub desc: Option<String>,
 
     /// Force toggle state (on/off/invert)
@@ -132,15 +132,15 @@ pub struct Cli {
     pub backup: Option<String>,
 
     /// Extend the last --line range to the end of file
-    #[arg(long = "to-end")]
+    #[arg(long = "to-end", requires = "lines")]
     pub to_end: bool,
 
     /// Scan for section IDs without modifying files
-    #[arg(long = "scan")]
+    #[arg(long = "scan", group = "operation")]
     pub scan: bool,
 
     /// Validate section integrity without modifying files. Requires --scan.
-    #[arg(long = "check")]
+    #[arg(long = "check", requires = "scan")]
     pub check: bool,
 
     /// Enforce exactly 2 variants in the targeted group; error otherwise.
@@ -159,7 +159,7 @@ pub struct Cli {
 
     /// Disable backup creation in atomic mode. Only valid with --atomic.
     /// WARNING: Without backups, rollback is not possible if the rename phase fails.
-    #[arg(long = "no-backup")]
+    #[arg(long = "no-backup", requires = "atomic")]
     pub no_backup: bool,
 
     /// Recover from an interrupted atomic operation. Default: rollback.
@@ -168,7 +168,7 @@ pub struct Cli {
 
     /// Complete an interrupted atomic commit instead of rolling back.
     /// Must be combined with --recover.
-    #[arg(long = "recover-forward")]
+    #[arg(long = "recover-forward", requires = "recover")]
     pub recover_forward: bool,
 
     /// Generate shell completions for the given shell to stdout.
