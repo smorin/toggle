@@ -248,6 +248,9 @@ fn run(cli: &Cli) -> Result<()> {
     // Handle --scan mode early (read-only, no toggle options needed).
     // Per PRD §0.14.2, --scan -S <id> is the detailed group view, so --section is allowed here.
     if cli.scan {
+        if cli.insert {
+            return Err(UsageError("--scan cannot be combined with --insert".into()).into());
+        }
         if !cli.lines.is_empty() {
             return Err(UsageError("--scan cannot be combined with --line".into()).into());
         }
@@ -304,11 +307,14 @@ fn run(cli: &Cli) -> Result<()> {
 
     // ── --insert mode validation (P05) ──
     if cli.insert {
-        if cli.scan || cli.list_sections {
-            return Err(UsageError("--insert cannot be combined with --scan or --list-sections".into()).into());
+        if cli.list_sections {
+            return Err(UsageError("--insert cannot be combined with --list-sections".into()).into());
         }
         if cli.force.is_some() {
             return Err(UsageError("--insert does not take --force (the body is left uncommented)".into()).into());
+        }
+        if cli.atomic {
+            return Err(UsageError("--insert cannot be combined with --atomic".into()).into());
         }
         if cli.recursive {
             return Err(UsageError("--insert operates on a single file; -R is not allowed".into()).into());

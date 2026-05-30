@@ -2057,7 +2057,8 @@ fn test_insert_rejects_duplicate_id() {
     cmd()
         .args([path.to_str().unwrap(), "--insert", "-S", "feat", "-l", "4:4"])
         .assert()
-        .failure();
+        .failure()
+        .stderr(predicates::str::contains("already exists"));
 }
 
 #[test]
@@ -2083,6 +2084,24 @@ fn test_insert_rejects_recursive() {
     let (_dir, path) = setup_temp_file("a\nb\n", "test.py");
     cmd()
         .args([path.to_str().unwrap(), "--insert", "-S", "feat", "-l", "1:2", "-R"])
+        .assert()
+        .failure();
+}
+
+#[test]
+fn test_insert_rejects_scan_combo() {
+    let (_dir, path) = setup_temp_file("a\nb\n", "test.py");
+    cmd()
+        .args([path.to_str().unwrap(), "--insert", "-S", "feat", "-l", "1:2", "--scan"])
+        .assert()
+        .failure();
+}
+
+#[test]
+fn test_insert_rejects_atomic_combo() {
+    let (_dir, path) = setup_temp_file("a\nb\n", "test.py");
+    cmd()
+        .args([path.to_str().unwrap(), "--insert", "-S", "feat", "-l", "1:2", "--atomic"])
         .assert()
         .failure();
 }
