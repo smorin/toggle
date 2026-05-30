@@ -11,6 +11,12 @@ pre-commit:
     toml-lint:
       glob: "*.toml"
       run: taplo fmt --check {staged_files}
+    # When the togl-ffi FFI surface changes, regenerate the committed C header
+    # and stage it, so a stale togl.h can't be committed. Reuses the same
+    # `just gen-c-header` the CI drift gate runs. Requires `cargo install cbindgen`.
+    gen-c-header:
+      glob: "crates/togl-ffi/**"
+      run: just gen-c-header && git add crates/togl-ffi/include/togl.h
 
 pre-push:
   commands:

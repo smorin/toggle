@@ -152,3 +152,25 @@ jobs:
 
       - name: Run actionlint
         run: ./actionlint
+
+  cbindgen-drift:
+    name: C header drift
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
+
+      # Pin cbindgen to the lockfile version so generated output matches build.rs.
+      - uses: taiki-e/install-action@899b013517f9e7774591216672bf75a46bb9a481 # v2.9.4
+        with:
+          tool: cbindgen@0.27.0
+
+      # Mirror of `just gen-c-header`, invoked directly: the CI-bundled `just`
+      # predates the `[group(...)]` attribute the Justfile uses.
+      - name: Regenerate the committed C header
+        run: cbindgen --config crates/togl-ffi/cbindgen.toml --output crates/togl-ffi/include/togl.h crates/togl-ffi
+
+      - name: Fail if the committed header is out of date
+        run: git diff --exit-code crates/togl-ffi/include/togl.h
