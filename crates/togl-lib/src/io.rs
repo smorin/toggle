@@ -37,6 +37,32 @@ pub fn read_file_encoded(path: &Path, encoding: &str) -> io::Result<String> {
     Ok(decoded.into_owned())
 }
 
+/// Read all of stdin and decode it with the specified encoding.
+/// The filter-mode analog of [`read_file_encoded`].
+pub fn read_stdin_encoded(encoding: &str) -> io::Result<String> {
+    let mut bytes = Vec::new();
+    io::stdin().read_to_end(&mut bytes)?;
+    if encoding.eq_ignore_ascii_case("utf-8") {
+        return String::from_utf8(bytes).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e));
+    }
+    let enc = resolve_encoding(encoding)?;
+    let (decoded, _, had_errors) = enc.decode(&bytes);
+    if had_errors {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("Failed to decode stdin as {}", encoding),
+        ));
+    }
+    Ok(decoded.into_owned())
+}
+
+/// Encode `content` with the specified encoding and write it to stdout.
+/// The filter-mode analog of [`write_file_encoded`].
+pub fn write_stdout_encoded(content: &str, encoding: &str) -> io::Result<()> {
+    let bytes = encode_string(content, encoding)?;
+    io::stdout().write_all(&bytes)
+}
+
 /// Resolve an encoding label to an encoding_rs::Encoding.
 /// Handles common aliases like "latin-1" that encoding_rs doesn't directly recognize.
 fn resolve_encoding(label: &str) -> io::Result<&'static encoding_rs::Encoding> {

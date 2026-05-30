@@ -138,6 +138,16 @@ pub struct Cli {
     #[arg(long = "backup")]
     pub backup: Option<String>,
 
+    /// Read input from stdin instead of a file (filter mode; writes to stdout).
+    /// Equivalent to passing `-` as the path. Only valid for toggle/insert/remove.
+    #[arg(long = "stdin")]
+    pub stdin: bool,
+
+    /// Write the transformed result to stdout instead of modifying files
+    /// (filter mode). A spelling of stdin filter mode; reads from stdin.
+    #[arg(long = "stdout")]
+    pub stdout: bool,
+
     /// Extend the last --line range to the end of file
     #[arg(long = "to-end", requires = "lines")]
     pub to_end: bool,
@@ -321,6 +331,31 @@ impl GlobalArgs {
     }
 }
 
+/// Filter-mode flags, shared by the writer subcommands (toggle/insert/remove).
+/// Both `--stdin` and `--stdout` are spellings of the same stdin→stdout filter
+/// mode (the classic `-` path is the third spelling).
+#[derive(clap::Args, Debug)]
+pub struct FilterArgs {
+    /// Read input from stdin and write to stdout (filter mode). Same as `-`.
+    #[arg(long = "stdin")]
+    pub stdin: bool,
+
+    /// Write the transformed result to stdout instead of modifying files.
+    #[arg(long = "stdout")]
+    pub stdout: bool,
+}
+
+impl FilterArgs {
+    fn push_argv(&self, out: &mut Vec<OsString>) {
+        if self.stdin {
+            out.push("--stdin".into());
+        }
+        if self.stdout {
+            out.push("--stdout".into());
+        }
+    }
+}
+
 /// Ergonomic subcommand surface. Each maps to a legacy operation mode.
 #[derive(clap::Subcommand, Debug)]
 pub enum Commands {
@@ -352,6 +387,8 @@ pub enum Commands {
         /// Disable backup creation in atomic mode (only valid with --atomic).
         #[arg(long = "no-backup")]
         no_backup: bool,
+        #[command(flatten)]
+        filter: FilterArgs,
         #[command(flatten)]
         global: GlobalArgs,
     },
@@ -399,8 +436,8 @@ pub enum Commands {
     },
     /// Insert a toggle:start/end marker pair around a single line range.
     Insert {
-        /// Single file to modify
-        path: PathBuf,
+        /// Single file to modify. Omit (with --stdin) or pass `-` to read stdin.
+        path: Option<PathBuf>,
         /// Section ID for the inserted marker (exactly one)
         #[arg(short = 'S', long = "section")]
         section: String,
@@ -413,6 +450,8 @@ pub enum Commands {
         /// Extend the range to the end of file
         #[arg(long = "to-end")]
         to_end: bool,
+        #[command(flatten)]
+        filter: FilterArgs,
         #[command(flatten)]
         global: GlobalArgs,
     },
@@ -432,6 +471,8 @@ pub enum Commands {
         /// Exit non-zero if -S <ID> matched no sections.
         #[arg(long = "require-match")]
         require_match: bool,
+        #[command(flatten)]
+        filter: FilterArgs,
         #[command(flatten)]
         global: GlobalArgs,
     },
@@ -463,6 +504,7 @@ impl Commands {
                 pair,
                 atomic,
                 no_backup,
+                filter,
                 global,
             } => {
                 for s in sections {
@@ -492,6 +534,7 @@ impl Commands {
                 if *no_backup {
                     out.push("--no-backup".into());
                 }
+                filter.push_argv(&mut out);
                 global.push_argv(&mut out);
                 push_paths(&mut out, paths);
             }
@@ -557,6 +600,7 @@ impl Commands {
                 line,
                 desc,
                 to_end,
+                filter,
                 global,
             } => {
                 out.push("--insert".into());
@@ -571,9 +615,12 @@ impl Commands {
                 if *to_end {
                     out.push("--to-end".into());
                 }
+                filter.push_argv(&mut out);
                 global.push_argv(&mut out);
-                out.push("--".into());
-                out.push(path.into());
+                if let Some(p) = path {
+                    out.push("--".into());
+                    out.push(p.into());
+                }
             }
             Commands::Remove {
                 paths,
@@ -581,6 +628,7 @@ impl Commands {
                 recursive,
                 remove_mode,
                 require_match,
+                filter,
                 global,
             } => {
                 out.push("--remove".into());
@@ -596,6 +644,7 @@ impl Commands {
                 if *require_match {
                     out.push("--require-match".into());
                 }
+                filter.push_argv(&mut out);
                 global.push_argv(&mut out);
                 push_paths(&mut out, paths);
             }

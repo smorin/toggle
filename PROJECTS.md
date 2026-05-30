@@ -230,7 +230,7 @@ See `docs/superpowers/specs/2026-05-29-release-please-commitlint-design.md`.
 
 ---
 
-## [~] Project P10: CLI ergonomics refactor (v0.5.0)
+## [x] Project P10: CLI ergonomics refactor (v0.5.0)
 **Goal**: Make the CLI more ergonomic without breaking the existing flat-flag
 interface. Three additive layers, shipped in order:
 1. **Declarative clap constraints** — replace hand-rolled flag-combination
@@ -255,8 +255,10 @@ interface. Three additive layers, shipped in order:
 - [x] [P10-T04] Option 1: `main()` subcommand bridge + TTY-only deprecation notice
 - [x] [P10-TS01] Parity tests: each subcommand ≡ its flat-flag form (incl. a
       defaulted `--remove-mode` case to guard default drift); scoping + help/man render
-- [ ] [P10-T05] Option 3: stdin/stdout filter support
-- [ ] [P10-TS02] Option 3: filter round-trip + `-`-as-path tests
+- [x] [P10-T05] Option 3: stdin/stdout filter mode (`-`/`--stdin`/`--stdout`,
+      writer ops only; rejection set for `--json`/`--atomic`/`--backup`/etc.)
+- [x] [P10-TS02] Option 3: stdin≡file parity + no-op byte-identity (trailing
+      newline both ways) + rejection-set tests
 
 ### Automated Verification
 - `cargo test` green (all parity + existing suites)
