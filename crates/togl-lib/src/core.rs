@@ -132,6 +132,76 @@ pub fn discover_sections(content: &str) -> Vec<SectionInfo> {
     sections
 }
 
+/// How `remove_section` strips a matched section.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RemoveMode {
+    /// Delete only the two marker lines; keep the body exactly as-is.
+    Markers,
+    /// Delete the markers and any fully-commented body lines; keep live code.
+    Commented,
+    /// Delete the entire span (markers + all body lines).
+    All,
+}
+
+/// Remove every section whose ID exactly equals `id`, per `mode`. Returns the
+/// rewritten content and the number of sections removed. Duplicate IDs within
+/// the file are all removed. A body line counts as "commented" when, after
+/// leading whitespace, it begins with the single-line comment prefix.
+pub fn remove_section(
+    content: &str,
+    id: &str,
+    mode: RemoveMode,
+    comment_style: &CommentStyle,
+) -> (String, usize) {
+    let lines: Vec<&str> = content.lines().collect();
+    let sections: Vec<SectionInfo> = discover_sections(content)
+        .into_iter()
+        .filter(|s| s.id == id)
+        .collect();
+    if sections.is_empty() {
+        return (content.to_string(), 0);
+    }
+
+    let mut delete = vec![false; lines.len()];
+    let prefix = comment_style.single_line.trim();
+    for s in &sections {
+        let start = s.start_line - 1; // 0-based start marker
+        let end = s.end_line - 1; // 0-based end marker
+        match mode {
+            RemoveMode::All => {
+                for slot in delete.iter_mut().take(end + 1).skip(start) {
+                    *slot = true;
+                }
+            }
+            RemoveMode::Markers => {
+                delete[start] = true;
+                delete[end] = true;
+            }
+            RemoveMode::Commented => {
+                delete[start] = true;
+                delete[end] = true;
+                for (k, line) in lines.iter().enumerate().take(end).skip(start + 1) {
+                    if !prefix.is_empty() && line.trim_start().starts_with(prefix) {
+                        delete[k] = true;
+                    }
+                }
+            }
+        }
+    }
+
+    let kept: Vec<&str> = lines
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| !delete[*i])
+        .map(|(_, l)| *l)
+        .collect();
+    let mut result = kept.join("\n");
+    if content.ends_with('\n') && !result.is_empty() {
+        result.push('\n');
+    }
+    (result, sections.len())
+}
+
 /// Return all `SectionInfo` whose ID parses into the given group.
 /// `discover_variants(content, "db")` matches both `db` (solo) and `db:postgres` (variant).
 pub fn discover_variants(content: &str, group: &str) -> Vec<SectionInfo> {

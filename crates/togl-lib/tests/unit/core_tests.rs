@@ -807,3 +807,70 @@ fn test_insert_section_rejects_inverted_range() {
     let content = "a\nb\nc\n";
     assert!(insert_section(content, "feat", None, 3, 1, "#").is_err());
 }
+
+// ── P06: core::remove_section (markers / commented / all) ──
+
+const REMOVE_FIXTURE: &str =
+    "outside1\n# toggle:start ID=feat1\n# commented_old\nlive_code\n# toggle:end ID=feat1\noutside2\n";
+
+#[test]
+fn test_remove_section_markers_keeps_body() {
+    let (out, n) = togl_lib::core::remove_section(
+        REMOVE_FIXTURE,
+        "feat1",
+        togl_lib::core::RemoveMode::Markers,
+        &comment_style_py(),
+    );
+    assert_eq!(n, 1);
+    assert_eq!(out, "outside1\n# commented_old\nlive_code\noutside2\n");
+}
+
+#[test]
+fn test_remove_section_commented_drops_comments_keeps_live() {
+    let (out, n) = togl_lib::core::remove_section(
+        REMOVE_FIXTURE,
+        "feat1",
+        togl_lib::core::RemoveMode::Commented,
+        &comment_style_py(),
+    );
+    assert_eq!(n, 1);
+    assert_eq!(out, "outside1\nlive_code\noutside2\n");
+}
+
+#[test]
+fn test_remove_section_all_drops_span() {
+    let (out, n) = togl_lib::core::remove_section(
+        REMOVE_FIXTURE,
+        "feat1",
+        togl_lib::core::RemoveMode::All,
+        &comment_style_py(),
+    );
+    assert_eq!(n, 1);
+    assert_eq!(out, "outside1\noutside2\n");
+}
+
+#[test]
+fn test_remove_section_removes_all_duplicate_ids() {
+    let content =
+        "# toggle:start ID=dup\na\n# toggle:end ID=dup\nmid\n# toggle:start ID=dup\nb\n# toggle:end ID=dup\n";
+    let (out, n) = togl_lib::core::remove_section(
+        content,
+        "dup",
+        togl_lib::core::RemoveMode::All,
+        &comment_style_py(),
+    );
+    assert_eq!(n, 2, "both duplicate sections removed");
+    assert_eq!(out, "mid\n");
+}
+
+#[test]
+fn test_remove_section_id_not_found_is_noop() {
+    let (out, n) = togl_lib::core::remove_section(
+        REMOVE_FIXTURE,
+        "missing",
+        togl_lib::core::RemoveMode::All,
+        &comment_style_py(),
+    );
+    assert_eq!(n, 0);
+    assert_eq!(out, REMOVE_FIXTURE);
+}

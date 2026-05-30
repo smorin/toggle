@@ -127,8 +127,32 @@ See `docs/superpowers/specs/2026-05-29-marker-insert-strip-list-filters-design.m
 
 ---
 
-> **Note:** P06 (`--remove`) remains reserved for the marker roadmap (not started).
-> The C ABI library is numbered P08; release automation P09.
+> **Note:** The marker roadmap (P05–P07) is complete. The C ABI library is
+> numbered P08; release automation P09.
+
+## [x] Project P06: `--remove` (recursive strip, three modes) (v0.6.0)
+**Goal**: Add `--remove -S <ID>` to strip a named section, recursively with `-R`.
+`--remove-mode markers|commented|all` (default `commented`): `markers` deletes
+only the marker lines; `commented` also deletes fully-commented body lines but
+keeps live code; `all` deletes the whole span. Refuses an ambiguous bare variant
+group; `--require-match` exits non-zero on no match. Reuses `--dry-run`/`--backup`.
+See `docs/superpowers/specs/2026-05-29-marker-insert-strip-list-filters-design.md` §P06.
+
+**Out of Scope**
+- `--remove --atomic` (guarded with an error for now; reuse the atomic batch later)
+- Multi-line-delimited (`/* … */`) "fully-wrapped body" detection (single-line prefix handled)
+
+### Tests & Tasks
+- [x] [P06-T01] `core::remove_section(content, id, mode, comment_style) -> (String, usize)` (3 modes, dup-IDs)
+- [x] [P06-TS01] Unit tests: markers / commented / all / duplicate-IDs / not-found
+- [x] [P06-T02] `RemoveMode` enum + `--remove` / `--remove-mode` / `--require-match` in `cli.rs`
+- [x] [P06-T03] `run_remove` in `main.rs` (walk, variant-group refusal, write via `apply_changes`, match counting)
+- [x] [P06-T04] Validation + dispatch; `--remove` conflicts + `--atomic` guard
+- [x] [P06-TS02] Integration tests: each mode, recursive, require-match, not-found, variant refusal, dry-run
+
+### Automated Verification
+- `cargo test --workspace` green (13 new tests; lib 99→104, integration 135→143)
+- `cargo clippy --workspace --all-targets -- -D warnings` clean
 
 ## [x] Project P07: List filters (`--fields`) (v0.5.0)
 **Goal**: Add `--fields ids|files|lines` to `--list-sections` to filter its text

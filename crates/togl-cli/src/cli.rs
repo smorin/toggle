@@ -15,6 +15,17 @@ pub enum ListFields {
     Lines,
 }
 
+/// What `--remove` strips from a matched section (P06).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum RemoveMode {
+    /// Delete only the two marker lines; keep the body.
+    Markers,
+    /// Delete the markers and fully-commented body lines; keep live code.
+    Commented,
+    /// Delete the entire span (markers + body, including live code).
+    All,
+}
+
 #[derive(Parser)]
 #[command(author, version, about)]
 pub struct Cli {
@@ -42,6 +53,18 @@ pub struct Cli {
     /// Detail level for --list-sections text output [default: lines]
     #[arg(long = "fields", default_value = "lines")]
     pub fields: ListFields,
+
+    /// Remove a named section (requires -S <ID>). Recursive with -R. See --remove-mode.
+    #[arg(long = "remove")]
+    pub remove: bool,
+
+    /// What --remove strips: markers | commented | all [default: commented]
+    #[arg(long = "remove-mode", default_value = "commented")]
+    pub remove_mode: RemoveMode,
+
+    /// With --remove, exit non-zero if -S <ID> matched no sections.
+    #[arg(long = "require-match")]
+    pub require_match: bool,
 
     /// Insert a toggle:start/end marker pair around a single -l range (single file).
     /// Requires exactly one -S <ID> and one -l <range>. Leaves the body uncommented.

@@ -2534,3 +2534,165 @@ fn togl_alias_completions_use_togl_name() {
 fn version_exits_zero() {
     cmd().arg("--version").assert().success();
 }
+
+// ── P06: --remove (markers / commented / all) ──
+
+const REMOVE_FILE: &str =
+    "keep_before\n# toggle:start ID=feat1\n# old_commented\nlive_code\n# toggle:end ID=feat1\nkeep_after\n";
+
+#[test]
+fn test_remove_markers_mode() {
+    let dir = setup_temp_dir_with_files(&[("a.py", REMOVE_FILE)]);
+    let p = dir.path().join("a.py");
+    cmd()
+        .args([
+            p.to_str().unwrap(),
+            "--remove",
+            "-S",
+            "feat1",
+            "--remove-mode",
+            "markers",
+        ])
+        .assert()
+        .success();
+    assert_eq!(
+        std::fs::read_to_string(&p).unwrap(),
+        "keep_before\n# old_commented\nlive_code\nkeep_after\n"
+    );
+}
+
+#[test]
+fn test_remove_commented_is_default() {
+    let dir = setup_temp_dir_with_files(&[("a.py", REMOVE_FILE)]);
+    let p = dir.path().join("a.py");
+    cmd()
+        .args([p.to_str().unwrap(), "--remove", "-S", "feat1"])
+        .assert()
+        .success();
+    assert_eq!(
+        std::fs::read_to_string(&p).unwrap(),
+        "keep_before\nlive_code\nkeep_after\n"
+    );
+}
+
+#[test]
+fn test_remove_all_mode() {
+    let dir = setup_temp_dir_with_files(&[("a.py", REMOVE_FILE)]);
+    let p = dir.path().join("a.py");
+    cmd()
+        .args([
+            p.to_str().unwrap(),
+            "--remove",
+            "-S",
+            "feat1",
+            "--remove-mode",
+            "all",
+        ])
+        .assert()
+        .success();
+    assert_eq!(
+        std::fs::read_to_string(&p).unwrap(),
+        "keep_before\nkeep_after\n"
+    );
+}
+
+#[test]
+fn test_remove_recursive_across_files() {
+    let dir = setup_temp_dir_with_files(&[
+        (
+            "a.py",
+            "# toggle:start ID=feat1\nx\n# toggle:end ID=feat1\nA\n",
+        ),
+        (
+            "sub/b.py",
+            "# toggle:start ID=feat1\ny\n# toggle:end ID=feat1\nB\n",
+        ),
+    ]);
+    cmd()
+        .args([
+            dir.path().to_str().unwrap(),
+            "-R",
+            "--remove",
+            "-S",
+            "feat1",
+            "--remove-mode",
+            "all",
+        ])
+        .assert()
+        .success();
+    assert_eq!(
+        std::fs::read_to_string(dir.path().join("a.py")).unwrap(),
+        "A\n"
+    );
+    assert_eq!(
+        std::fs::read_to_string(dir.path().join("sub/b.py")).unwrap(),
+        "B\n"
+    );
+}
+
+#[test]
+fn test_remove_not_found_warns_exit_zero() {
+    let dir = setup_temp_dir_with_files(&[("a.py", REMOVE_FILE)]);
+    cmd()
+        .args([
+            dir.path().join("a.py").to_str().unwrap(),
+            "--remove",
+            "-S",
+            "nope",
+        ])
+        .assert()
+        .success()
+        .stderr(predicates::str::contains("matched no sections"));
+}
+
+#[test]
+fn test_remove_require_match_exits_nonzero() {
+    let dir = setup_temp_dir_with_files(&[("a.py", REMOVE_FILE)]);
+    cmd()
+        .args([
+            dir.path().join("a.py").to_str().unwrap(),
+            "--remove",
+            "-S",
+            "nope",
+            "--require-match",
+        ])
+        .assert()
+        .failure();
+}
+
+#[test]
+fn test_remove_refuses_ambiguous_variant_group() {
+    let dir = setup_temp_dir_with_files(&[(
+        "v.py",
+        "# toggle:start ID=db:sqlite\na\n# toggle:end ID=db:sqlite\n# toggle:start ID=db:postgres\nb\n# toggle:end ID=db:postgres\n",
+    )]);
+    cmd()
+        .args([
+            dir.path().join("v.py").to_str().unwrap(),
+            "--remove",
+            "-S",
+            "db",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains("variants"));
+}
+
+#[test]
+fn test_remove_dry_run_leaves_file_unchanged() {
+    let dir = setup_temp_dir_with_files(&[("a.py", REMOVE_FILE)]);
+    let p = dir.path().join("a.py");
+    cmd()
+        .args([
+            p.to_str().unwrap(),
+            "--remove",
+            "-S",
+            "feat1",
+            "--remove-mode",
+            "all",
+            "--dry-run",
+        ])
+        .assert()
+        .success();
+    assert_eq!(std::fs::read_to_string(&p).unwrap(), REMOVE_FILE);
+}
