@@ -7,6 +7,24 @@ use std::process::Command;
 
 #[test]
 fn c_program_links_and_runs() {
+    // This is a *linkage* proof: a real C program links `libtogl.a` and calls the
+    // ABI. Skip where linking a Rust staticlib from C is impractical — the FFI
+    // functions remain covered by the Rust unit tests on every platform:
+    //   - Windows: the archive is `togl.lib` and linking needs MSVC + extra libs.
+    //   - llvm-cov: the staticlib is instrumented and won't link into a plain C program.
+    if cfg!(target_os = "windows") {
+        eprintln!("c_smoke: skipped on Windows (Unix-only linkage proof)");
+        return;
+    }
+    if std::env::var_os("LLVM_PROFILE_FILE").is_some()
+        || std::env::current_exe()
+            .map(|p| p.to_string_lossy().contains("llvm-cov"))
+            .unwrap_or(false)
+    {
+        eprintln!("c_smoke: skipped under llvm-cov (FFI covered by Rust unit tests)");
+        return;
+    }
+
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
 
     // The test executable lives at target/<profile>/deps/<bin>; the static
