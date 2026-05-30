@@ -2107,6 +2107,55 @@ fn test_insert_rejects_atomic_combo() {
 }
 
 #[test]
+fn test_insert_to_end() {
+    let (_dir, path) = setup_temp_file("a\nb\nc\n", "test.py");
+    cmd()
+        .args([path.to_str().unwrap(), "--insert", "-S", "feat", "-l", "2", "--to-end"])
+        .assert()
+        .success();
+    let result = fs::read_to_string(&path).unwrap();
+    assert_eq!(
+        result,
+        "a\n# toggle:start ID=feat\nb\nc\n# toggle:end ID=feat\n"
+    );
+}
+
+#[test]
+fn test_insert_comment_style_override() {
+    // .txt has no known comment style; --comment-style supplies one.
+    let (_dir, path) = setup_temp_file("a\nb\n", "notes.txt");
+    cmd()
+        .args([
+            path.to_str().unwrap(),
+            "--insert",
+            "-S",
+            "feat",
+            "-l",
+            "1:2",
+            "--comment-style",
+            ";;",
+        ])
+        .assert()
+        .success();
+    let result = fs::read_to_string(&path).unwrap();
+    assert_eq!(
+        result,
+        ";; toggle:start ID=feat\na\nb\n;; toggle:end ID=feat\n"
+    );
+}
+
+#[test]
+fn test_insert_dry_run_does_not_write() {
+    let (_dir, path) = setup_temp_file("a\nb\n", "test.py");
+    cmd()
+        .args([path.to_str().unwrap(), "--insert", "-S", "feat", "-l", "1:2", "--dry-run"])
+        .assert()
+        .success();
+    let result = fs::read_to_string(&path).unwrap();
+    assert_eq!(result, "a\nb\n"); // unchanged
+}
+
+#[test]
 fn scan_detailed_view_for_specific_variant() {
     let dir = TempDir::new().unwrap();
     fs::copy("tests/fixtures/variants.py", dir.path().join("variants.py")).unwrap();
