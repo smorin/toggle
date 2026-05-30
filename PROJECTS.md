@@ -127,8 +127,24 @@ See `docs/superpowers/specs/2026-05-29-marker-insert-strip-list-filters-design.m
 
 ---
 
-> **Note:** P06 (`--remove`) and P07 (list filters) remain reserved for the marker
-> roadmap. The C ABI library is numbered P08.
+> **Note:** P06 (`--remove`) remains reserved for the marker roadmap (not started).
+> The C ABI library is numbered P08; release automation P09.
+
+## [x] Project P07: List filters (`--fields`) (v0.5.0)
+**Goal**: Add `--fields ids|files|lines` to `--list-sections` to filter its text
+output. Default `lines` keeps current behavior (backward compatible); `--json`
+is unaffected. See `docs/superpowers/specs/2026-05-29-marker-insert-strip-list-filters-design.md` §P07.
+
+### Tests & Tasks
+- [x] [P07-T01] `ListFields` enum (clap `ValueEnum`) + `--fields` arg in `cli.rs`
+- [x] [P07-T02] Guard: `--fields` requires `--list-sections`
+- [x] [P07-T03] Branch `run_list_sections` text output on the level (ids / files / lines)
+- [x] [P07-TS01] Integration tests: each level, `lines` == default, `--json` unchanged, requires-guard
+
+### Automated Verification
+- `cargo test --workspace` green (5 new integration tests; integration 130 → 135)
+- `cargo clippy --workspace --all-targets -- -D warnings` clean
+- `--fields lines` output byte-identical to prior behavior
 
 ## [x] Project P08: ABI-Stable C Library (`libtogl`) (v0.3.0)
 **Goal**: Add a `togl-ffi` workspace crate exposing an ABI-stable C library

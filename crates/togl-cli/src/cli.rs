@@ -4,6 +4,17 @@ use clap::Parser;
 use clap_complete::Shell;
 use std::path::PathBuf;
 
+/// Output detail level for `--list-sections` (P07).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum ListFields {
+    /// Section IDs and descriptions only.
+    Ids,
+    /// IDs plus each file path (no line numbers).
+    Files,
+    /// IDs plus `file:start-end` (current default behavior).
+    Lines,
+}
+
 #[derive(Parser)]
 #[command(author, version, about)]
 pub struct Cli {
@@ -27,6 +38,10 @@ pub struct Cli {
     /// List all section IDs found in files (discovery mode, no toggling)
     #[arg(long = "list-sections")]
     pub list_sections: bool,
+
+    /// Detail level for --list-sections text output [default: lines]
+    #[arg(long = "fields", default_value = "lines")]
+    pub fields: ListFields,
 
     /// Insert a toggle:start/end marker pair around a single -l range (single file).
     /// Requires exactly one -S <ID> and one -l <range>. Leaves the body uncommented.
