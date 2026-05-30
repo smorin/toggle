@@ -30,6 +30,24 @@ toggle -S debug --force on -R src/
 toggle --scan -R src/
 ```
 
+## Subcommands
+
+Every operation is also available as a subcommand that exposes only the flags
+relevant to it. The subcommands are equivalent to the flat flags below (they run
+through the same engine), but are easier to discover and harder to misuse:
+
+| Subcommand | Flat-flag equivalent |
+|---|---|
+| `toggle <paths> -S id` | `toggle <paths> -S id` |
+| `toggle scan -R src/` | `toggle --scan -R src/` |
+| `toggle check -R src/` | `toggle --scan --check -R src/` |
+| `toggle list src/` | `toggle --list-sections src/` |
+| `toggle insert main.py -S id -l 10:20` | `toggle --insert -S id -l 10:20 main.py` |
+| `toggle remove main.py -S id` | `toggle --remove -S id main.py` |
+
+Run `toggle <subcommand> --help` to see its scoped flags. The flat-flag form
+still works and is supported, but is deprecated in favor of the subcommands.
+
 ## Section markers
 
 Wrap any block in a paired marker comment that the tool can find:
@@ -105,6 +123,30 @@ toggle --scan -R src/ --json
 
 `--check` exits non-zero on any error finding (unclosed markers, duplicate
 IDs); warnings (variant gaps, pair-count mismatches) do not fail the run.
+
+## Filter mode (stdin → stdout)
+
+The writer operations (`toggle`, `insert`, `remove`) can read from stdin and
+write the transformed result to stdout, leaving any file untouched — so `toggle`
+composes in a pipeline. Use a `-` path, or the `--stdin` / `--stdout` aliases:
+
+```bash
+# Toggle a section, reading stdin and writing stdout
+cat main.py | toggle - -S featureX
+
+# Equivalent spellings
+toggle --stdin  -S featureX < main.py
+toggle --stdout -S featureX < main.py
+
+# Works with the subcommands too
+toggle remove --stdin -S featureX < main.py
+toggle insert --stdin -S featureX -l 10:20 < main.py > wrapped.py
+```
+
+Piped input has no file extension, so the comment style defaults to `#`
+(Python); pass `--comment-style` for other languages. Filter mode is a single
+stdin→stdout transform: it does not accept file paths, `--json`, `--atomic`,
+`--backup`, `--dry-run`, `--interactive`, or `-R`.
 
 ## Atomic multi-file mode
 
