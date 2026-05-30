@@ -771,3 +771,35 @@ fn test_insert_section_no_trailing_newline() {
     let result = insert_section(content, "feat", None, 1, 2, "#").unwrap();
     assert_eq!(result, "# toggle:start ID=feat\na\nb\n# toggle:end ID=feat");
 }
+
+#[test]
+fn test_insert_section_rejects_duplicate_id() {
+    let content = "# toggle:start ID=feat\nx\n# toggle:end ID=feat\ny\n";
+    let err = insert_section(content, "feat", None, 4, 4, "#");
+    assert!(err.is_err());
+}
+
+#[test]
+fn test_insert_section_rejects_out_of_bounds() {
+    let content = "a\nb\n";
+    assert!(insert_section(content, "feat", None, 1, 5, "#").is_err());
+}
+
+#[test]
+fn test_insert_section_rejects_bad_id() {
+    let content = "a\nb\n";
+    assert!(insert_section(content, "a b", None, 1, 2, "#").is_err());
+    assert!(insert_section(content, "", None, 1, 2, "#").is_err());
+}
+
+#[test]
+fn test_insert_section_rejects_quote_in_desc() {
+    let content = "a\nb\n";
+    assert!(insert_section(content, "feat", Some("has \" quote"), 1, 2, "#").is_err());
+}
+
+#[test]
+fn test_insert_section_rejects_inverted_range() {
+    let content = "a\nb\nc\n";
+    assert!(insert_section(content, "feat", None, 3, 1, "#").is_err());
+}
