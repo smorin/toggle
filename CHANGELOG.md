@@ -3,6 +3,13 @@
 All notable changes are listed here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [SemVer](https://semver.org/).
 
+## [0.4.0](https://github.com/smorin/toggle/compare/v0.3.0...v0.4.0) (2026-05-30)
+
+
+### Features
+
+* **nix:** add flake exposing togl CLI + libtogl C library ([#29](https://github.com/smorin/toggle/issues/29)) ([f9724f5](https://github.com/smorin/toggle/commit/f9724f5034bd75ad6b338d84f770ae73692b8e2e))
+
 ## [0.3.0](https://github.com/smorin/toggle/compare/v0.2.3...v0.3.0) (2026-05-30)
 
 
