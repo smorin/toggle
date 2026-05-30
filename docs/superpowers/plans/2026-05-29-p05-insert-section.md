@@ -30,6 +30,10 @@
 - `main.rs::resolve_comment_style(path, opts) -> Result<core::CommentStyle>` applies `--comment-style` override then falls back to `get_comment_style` (`src/main.rs:887`). `CommentStyle.single_line: String` is the prefix to use.
 - Integration test helpers `setup_temp_file(content, filename)` and `cmd()` already exist (`tests/integration.rs:11`).
 
+### Out of scope for P05
+
+- **`--eol` normalization on insert.** `insert_section` mirrors `toggle_comments_inner`'s LF-based reconstruction (`lines.join("\n")` + preserved trailing newline). It does not re-apply `--eol` normalization. On CRLF files the inserted markers use LF line endings. This matches the existing pure-transform pattern and is acceptable for P05; revisit only if a CRLF requirement surfaces.
+
 ---
 
 ## Task 1: `core::insert_section` — happy path
@@ -558,34 +562,46 @@ toggle --insert -S featureX -l 10:20 --desc "new feature" main.py
 `toggle -S featureX main.py` afterward to comment the block.
 ```
 
-- [ ] **Step 2: Add PROJECTS.md entry**
+- [ ] **Step 2: Add PROJECTS.md entry (as In Progress)**
+
+Use **this repo's** status legend (top of `PROJECTS.md`): `[x]` Completed, `[-]`
+In Progress, `[ ]` Not Started, `[~]` Won't fix. (Note: this is the *inverse* of
+the global CLAUDE.md legend — follow the repo file.) Create the entry as In
+Progress with unchecked tasks; it is flipped to Completed in Step 4 after
+`just dev` passes.
 
 In `PROJECTS.md`, after the P04 block, add:
 
 ```markdown
 ---
 
-## [x] Project P05: `--insert` Marker Insertion (v0.3.0)
+## [-] Project P05: `--insert` Marker Insertion (vNEXT)
 **Goal**: Add a `--insert` mode that wraps a single file's `-l start:end` block
 in a `toggle:start`/`toggle:end` marker pair, leaving the body uncommented.
 See `docs/superpowers/specs/2026-05-29-marker-insert-strip-list-filters-design.md`.
 
 ### Tests & Tasks
-- [x] [P05-T01] `core::insert_section` happy path + unit tests
-- [x] [P05-T02] `insert_section` guards (dup ID, bounds, bad id/desc) + unit tests
-- [x] [P05-T03] `--insert` / `--desc` CLI flags, validation, `run_insert` + integration tests
-- [x] [P05-T04] `--to-end`, `--comment-style`, `--dry-run` integration tests
-- [x] [P05-T05] README + PROJECTS.md + `just dev`
+- [ ] [P05-T01] `core::insert_section` happy path + unit tests
+- [ ] [P05-T02] `insert_section` guards (dup ID, bounds, bad id/desc) + unit tests
+- [ ] [P05-T03] `--insert` / `--desc` CLI flags, validation, `run_insert` + integration tests
+- [ ] [P05-T04] `--to-end`, `--comment-style`, `--dry-run` integration tests
+- [ ] [P05-T05] README + PROJECTS.md + `just dev`
 ```
 
-(Update the checkboxes to `[x]` only as each task is actually completed.)
+> Replace `vNEXT` with the version the user chooses at the execution handoff
+> (its own minor version, or bundled with P06/P07 — see the plan's handoff note).
 
 - [ ] **Step 3: Run the full dev cycle**
 
 Run: `just dev`
 Expected: format clean, `clippy -D warnings` clean, all tests pass, build succeeds.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 4: Flip P05 to Completed in PROJECTS.md**
+
+Only after Step 3 passes, change the P05 header `## [-]` → `## [x]` and mark every
+`[P05-T0x]` task `[x]`. Do not mark complete before the build is green.
+
+- [ ] **Step 5: Commit**
 
 ```bash
 git add README.md PROJECTS.md
