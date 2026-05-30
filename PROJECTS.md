@@ -124,3 +124,38 @@ See `docs/superpowers/specs/2026-05-29-marker-insert-strip-list-filters-design.m
 - [x] [P05-T03] `--insert` / `--desc` CLI flags, validation, `run_insert` + integration tests
 - [x] [P05-T04] `--to-end`, `--comment-style`, `--dry-run` integration tests
 - [x] [P05-T05] README + PROJECTS.md + `just dev`
+
+---
+
+> **Note:** P06 (`--remove`) and P07 (list filters) remain reserved for the marker
+> roadmap. The C ABI library is numbered P08.
+
+## [-] Project P08: ABI-Stable C Library (`libtogl`) (v0.3.0)
+**Goal**: Add a `togl-ffi` workspace crate exposing an ABI-stable C library
+(`libtogl`, static + shared) over `togl-lib`'s string-core and introspection,
+with a cbindgen-generated committed header, a C smoke test, and pkg-config.
+Also renames the workspace crates to the `togl-*` convention (`togl-lib`, `togl-cli`).
+See `docs/superpowers/specs/2026-05-29-togl-c-abi-library-design.md` and
+`docs/superpowers/plans/2026-05-29-togl-ffi-c-library.md`.
+
+**Out of Scope**
+- Nix flake output and the nixpkgs `libtogl` package (separate follow-on)
+- Python and TypeScript bindings (future projects consuming `libtogl`)
+
+### Tests & Tasks
+- [x] [P08-T01] Rename crates → `togl-lib` / `togl-cli` for `togl-*` consistency
+- [x] [P08-T02] Scaffold `togl-ffi` crate (`[lib] name="togl"`, static+cdylib) → `libtogl`
+- [x] [P08-T03] Error codes, panic guard, string + metadata lifecycle
+- [x] [P08-T04] Transform functions (toggle_comments, section toggle, activate_variant)
+- [x] [P08-T05] Introspection functions returning JSON (discover, scan, validate)
+- [x] [P08-T06] cbindgen build script + committed `include/togl.h`
+- [x] [P08-TS01] C smoke test linking and exercising `libtogl`
+- [x] [P08-T07] pkg-config template + C API README
+
+### Automated Verification
+- `cargo test --workspace --all-features` passes (249 tests, incl. FFI unit + C smoke)
+- `cargo clippy --workspace --all-targets -- -D warnings` clean
+- `libtogl.a` / `libtogl.dylib` + `include/togl.h` produced
+
+### Detailed Implementation Plan
+See `docs/superpowers/plans/2026-05-29-togl-ffi-c-library.md`
