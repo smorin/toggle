@@ -3,6 +3,30 @@
 All notable changes are listed here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [SemVer](https://semver.org/).
 
+## [0.3.0](https://github.com/smorin/toggle/compare/v0.2.3...v0.3.0) (2026-05-30)
+
+
+### Features
+
+* **cli:** add --insert marker-insertion mode (P05, v0.3.0) ([#23](https://github.com/smorin/toggle/issues/23)) ([0756d68](https://github.com/smorin/toggle/commit/0756d683ff2f3ab28a8720e3cead2013f209248c))
+* **cli:** wire --insert mode and --desc flag (P05) ([de6d767](https://github.com/smorin/toggle/commit/de6d7674a3ef07f58133df7c7cf0e3456d2f34a0))
+* **core:** add insert_section marker insertion (P05) ([b23a82e](https://github.com/smorin/toggle/commit/b23a82e8d9e94f146a58aa7db6f67161cf00d3b9))
+* **ffi:** add togl-ffi C library (libtogl) + togl-* crate rename ([#24](https://github.com/smorin/toggle/issues/24)) ([c9ba98d](https://github.com/smorin/toggle/commit/c9ba98dcf7a46ca3f98ae8db5dfe000628bcbeb0))
+* P05 --insert + togl-ffi C library (libtogl) + togl-* rename ([1124c61](https://github.com/smorin/toggle/commit/1124c61615fe31fbeb7a8737000dc95845706047))
+
+
+### Bug Fixes
+
+* **ci:** self-build libtogl staticlib in C smoke test; allow MPL-2.0 (cbindgen) in deny ([b5b17fc](https://github.com/smorin/toggle/commit/b5b17fcf9b59ffcd491f1ac378c7663eab6da2f1))
+* **cli:** honor --eol and reject --pair in --insert mode (P05) ([5e290e5](https://github.com/smorin/toggle/commit/5e290e5452192b27de3a8378436740c6fe2d0469))
+* **cli:** reject --insert with --scan/--atomic; strengthen dup-id test (P05) ([9949b5f](https://github.com/smorin/toggle/commit/9949b5ffc39bd6df3587a324e9d08bf5fcbf4c64))
+* silence cargo shared-target warning, correct README install line ([cf2da8c](https://github.com/smorin/toggle/commit/cf2da8cb4d9180dd98e5a744c44742461c0bc8a5))
+
+
+### Refactor
+
+* split into Cargo workspace with toggle-lib and toggle-cli crates ([#22](https://github.com/smorin/toggle/issues/22)) ([1dcce1a](https://github.com/smorin/toggle/commit/1dcce1ac7bc27c8b5a31e9b7443fcc8a5e0097cc))
+
 ## [0.2.3] — 2026-04-16
 
 ### Added
