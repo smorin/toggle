@@ -130,7 +130,7 @@ See `docs/superpowers/specs/2026-05-29-marker-insert-strip-list-filters-design.m
 > **Note:** P06 (`--remove`) and P07 (list filters) remain reserved for the marker
 > roadmap. The C ABI library is numbered P08.
 
-## [-] Project P08: ABI-Stable C Library (`libtogl`) (v0.3.0)
+## [x] Project P08: ABI-Stable C Library (`libtogl`) (v0.3.0)
 **Goal**: Add a `togl-ffi` workspace crate exposing an ABI-stable C library
 (`libtogl`, static + shared) over `togl-lib`'s string-core and introspection,
 with a cbindgen-generated committed header, a C smoke test, and pkg-config.
@@ -162,7 +162,7 @@ See `docs/superpowers/plans/2026-05-29-togl-ffi-c-library.md`
 
 ---
 
-## [-] Project P09: Release automation (release-please + commitlint) (v0.3.0)
+## [x] Project P09: Release automation (release-please + commitlint) (v0.3.0)
 **Goal**: Add PR-driven, Conventional-Commit-based releases modeled on
 py-launch-blueprint, adapted to the Rust workspace: release-please opens a
 release PR (bumps `[workspace.package].version` + `CHANGELOG.md`); merging it
