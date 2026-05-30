@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 mod cli;
-use cli::{Cli, ListFields};
+use cli::{Cli, ListFields, RemoveMode};
 use togl_lib::config::ToggleConfig;
 use togl_lib::core;
 use togl_lib::exit_codes::{ExitCode, UsageError};
@@ -299,6 +299,21 @@ fn run(cli: &Cli) -> Result<()> {
     if cli.fields != ListFields::Lines && !cli.list_sections {
         return Err(UsageError("--fields requires --list-sections".into()).into());
     }
+    // --remove validation (P06)
+    if cli.remove {
+        if cli.sections.len() != 1 {
+            return Err(UsageError("--remove requires exactly one -S <ID>".into()).into());
+        }
+        if cli.insert || cli.list_sections || cli.scan {
+            return Err(UsageError(
+                "--remove cannot be combined with --insert, --list-sections, or --scan".into(),
+            )
+            .into());
+        }
+        if cli.atomic {
+            return Err(UsageError("--remove cannot be combined with --atomic".into()).into());
+        }
+    }
 
     // Validate --eol value
     match cli.eol.as_str() {
@@ -365,6 +380,8 @@ fn run(cli: &Cli) -> Result<()> {
 
     if cli.insert {
         run_insert(cli, &opts)
+    } else if cli.remove {
+        run_remove(cli, &opts)
     } else if cli.list_sections {
         run_list_sections(cli, &opts)
     } else if cli.atomic {
@@ -780,6 +797,84 @@ fn run_insert(cli: &Cli, opts: &ToggleOptions) -> Result<()> {
             start,
             end
         );
+    }
+    Ok(())
+}
+
+fn run_remove(cli: &Cli, opts: &ToggleOptions) -> Result<()> {
+    let id = &cli.sections[0];
+    let mode = match cli.remove_mode {
+        RemoveMode::Markers => core::RemoveMode::Markers,
+        RemoveMode::Commented => core::RemoveMode::Commented,
+        RemoveMode::All => core::RemoveMode::All,
+    };
+
+    let walk_opts = walk::WalkOptions {
+        verbose: opts.verbose,
+        skip_unsupported_extensions: false,
+        ..walk::WalkOptions::default()
+    };
+    let files = walk::collect_files(&cli.paths, cli.recursive, &walk_opts)?;
+
+    // Refuse an ambiguous bare group: `-S db` where db:sqlite / db:postgres exist
+    // and no exact `db` section. Mirrors the toggling group-ambiguity behavior.
+    if !id.contains(':') {
+        let mut has_exact = false;
+        let mut variants = std::collections::BTreeSet::new();
+        for path in &files {
+            if let Ok(content) = io::read_file_encoded(path, opts.encoding) {
+                for s in core::discover_variants(&content, id) {
+                    if &s.id == id {
+                        has_exact = true;
+                    } else {
+                        variants.insert(s.id);
+                    }
+                }
+            }
+        }
+        if !has_exact && variants.len() >= 2 {
+            let list: Vec<String> = variants.into_iter().collect();
+            return Err(UsageError(format!(
+                "section '{}' is a group with {} variants; specify one (e.g. -S {}). variants: {}",
+                id,
+                list.len(),
+                list[0],
+                list.join(", ")
+            ))
+            .into());
+        }
+    }
+
+    let mut total_removed = 0usize;
+    for path in &files {
+        let content = match io::read_file_encoded(path, opts.encoding) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+        let style = resolve_comment_style(path, opts)?;
+        let (modified, removed) = core::remove_section(&content, id, mode, &style);
+        total_removed += removed;
+        if removed > 0 {
+            let modified = io::normalize_eol(&modified, opts.eol);
+            apply_changes(path, &content, &modified, opts)?;
+            if opts.verbose {
+                eprintln!(
+                    "Removed {} section(s) '{}' from {}",
+                    removed,
+                    id,
+                    path.display()
+                );
+            }
+        }
+    }
+
+    if total_removed == 0 {
+        eprintln!("Warning: -S {} matched no sections", id);
+        if cli.require_match {
+            return Err(
+                UsageError(format!("--require-match: -S {} matched no sections", id)).into(),
+            );
+        }
     }
     Ok(())
 }
