@@ -1,5 +1,5 @@
 [package]
-name = "toggle-lib"
+name = "togl-lib"
 description = "Core library for toggling code comments across multiple languages"
 version.workspace = true
 edition.workspace = true
@@ -8,7 +8,7 @@ license.workspace = true
 repository.workspace = true
 
 [lib]
-name = "toggle_lib"
+name = "togl_lib"
 path = "src/lib.rs"
 
 [dependencies]

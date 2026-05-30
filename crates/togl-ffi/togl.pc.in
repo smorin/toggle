@@ -1,0 +1,10 @@
+prefix=@prefix@
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: togl
+Description: ABI-stable C library for toggling code comments (libtogl)
+Version: @version@
+Libs: -L${libdir} -ltogl
+Cflags: -I${includedir}

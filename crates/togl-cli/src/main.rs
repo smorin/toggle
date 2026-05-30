@@ -7,12 +7,12 @@ use std::sync::Arc;
 
 mod cli;
 use cli::Cli;
-use toggle_lib::config::ToggleConfig;
-use toggle_lib::core;
-use toggle_lib::exit_codes::{ExitCode, UsageError};
-use toggle_lib::io;
-use toggle_lib::journal;
-use toggle_lib::walk;
+use togl_lib::config::ToggleConfig;
+use togl_lib::core;
+use togl_lib::exit_codes::{ExitCode, UsageError};
+use togl_lib::io;
+use togl_lib::journal;
+use togl_lib::walk;
 
 /// Bundled options passed through the toggle pipeline.
 struct ToggleOptions<'a> {
