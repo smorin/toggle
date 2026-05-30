@@ -1,5 +1,5 @@
 [package]
-name = "toggle-cli"
+name = "togl-cli"
 description = "A CLI tool for toggling code comments across multiple languages"
 version.workspace = true
 edition.workspace = true
@@ -16,7 +16,7 @@ name = "togl"
 path = "src/bin/togl.rs"
 
 [dependencies]
-toggle-lib = { path = "../toggle-lib" }
+togl-lib = { path = "../togl-lib" }
 anyhow.workspace = true
 serde.workspace = true
 serde_json = "1"
@@ -26,7 +26,7 @@ clap_mangen = "0.2"
 signal-hook = "0.3"
 
 [dev-dependencies]
-toggle-lib = { path = "../toggle-lib" }
+togl-lib = { path = "../togl-lib" }
 assert_cmd = "2.0"
 predicates = "3.0"
 tempfile.workspace = true
@@ -39,4 +39,4 @@ harness = false
 
 [features]
 default = []
-extended-logging = ["toggle-lib/extended-logging"]
+extended-logging = ["togl-lib/extended-logging"]

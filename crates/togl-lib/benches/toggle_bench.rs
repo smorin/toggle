@@ -1,5 +1,5 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use toggle_lib::core::{
+use togl_lib::core::{
     find_and_toggle_section, toggle_comments, toggle_comments_multi, CommentStyle, LineRange,
 };
 

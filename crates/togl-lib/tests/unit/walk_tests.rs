@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 use tempfile::TempDir;
-use toggle_lib::walk::{collect_files, WalkOptions};
+use togl_lib::walk::{collect_files, WalkOptions};
 
 fn default_opts() -> WalkOptions {
     WalkOptions::default()
