@@ -129,6 +129,13 @@ alias rr := run-release
 
 alias b := build
 
+# Regenerate the committed C header (cbindgen) for the togl-ffi crate.
+# Run after changing the `extern "C"` surface in crates/togl-ffi/src/.
+# Requires `cargo install cbindgen` (pinned to the lockfile version in CI).
+[group('build')]
+@gen-c-header:
+    cbindgen --config crates/togl-ffi/cbindgen.toml --output crates/togl-ffi/include/togl.h crates/togl-ffi
+
 # Set up pre-commit hooks (install lefthook hooks into .git)
 [group('pre-commit')]
 @pre-commit-setup:
