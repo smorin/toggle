@@ -2003,7 +2003,14 @@ fn scan_json_emits_nested_tree() {
 fn test_insert_basic() {
     let (_dir, path) = setup_temp_file("a\nb\nc\nd\n", "test.py");
     cmd()
-        .args([path.to_str().unwrap(), "--insert", "-S", "feat", "-l", "2:3"])
+        .args([
+            path.to_str().unwrap(),
+            "--insert",
+            "-S",
+            "feat",
+            "-l",
+            "2:3",
+        ])
         .assert()
         .success();
     let result = fs::read_to_string(&path).unwrap();
@@ -2040,7 +2047,14 @@ fn test_insert_with_desc() {
 fn test_insert_round_trips_through_scan() {
     let (_dir, path) = setup_temp_file("a\nb\nc\n", "test.py");
     cmd()
-        .args([path.to_str().unwrap(), "--insert", "-S", "feat", "-l", "1:2"])
+        .args([
+            path.to_str().unwrap(),
+            "--insert",
+            "-S",
+            "feat",
+            "-l",
+            "1:2",
+        ])
         .assert()
         .success();
     cmd()
@@ -2052,10 +2066,19 @@ fn test_insert_round_trips_through_scan() {
 
 #[test]
 fn test_insert_rejects_duplicate_id() {
-    let (_dir, path) =
-        setup_temp_file("# toggle:start ID=feat\nx\n# toggle:end ID=feat\ny\n", "test.py");
+    let (_dir, path) = setup_temp_file(
+        "# toggle:start ID=feat\nx\n# toggle:end ID=feat\ny\n",
+        "test.py",
+    );
     cmd()
-        .args([path.to_str().unwrap(), "--insert", "-S", "feat", "-l", "4:4"])
+        .args([
+            path.to_str().unwrap(),
+            "--insert",
+            "-S",
+            "feat",
+            "-l",
+            "4:4",
+        ])
         .assert()
         .failure()
         .stderr(predicates::str::contains("already exists"));
@@ -2083,7 +2106,15 @@ fn test_insert_requires_single_section() {
 fn test_insert_rejects_recursive() {
     let (_dir, path) = setup_temp_file("a\nb\n", "test.py");
     cmd()
-        .args([path.to_str().unwrap(), "--insert", "-S", "feat", "-l", "1:2", "-R"])
+        .args([
+            path.to_str().unwrap(),
+            "--insert",
+            "-S",
+            "feat",
+            "-l",
+            "1:2",
+            "-R",
+        ])
         .assert()
         .failure();
 }
@@ -2092,7 +2123,15 @@ fn test_insert_rejects_recursive() {
 fn test_insert_rejects_scan_combo() {
     let (_dir, path) = setup_temp_file("a\nb\n", "test.py");
     cmd()
-        .args([path.to_str().unwrap(), "--insert", "-S", "feat", "-l", "1:2", "--scan"])
+        .args([
+            path.to_str().unwrap(),
+            "--insert",
+            "-S",
+            "feat",
+            "-l",
+            "1:2",
+            "--scan",
+        ])
         .assert()
         .failure();
 }
@@ -2101,7 +2140,15 @@ fn test_insert_rejects_scan_combo() {
 fn test_insert_rejects_atomic_combo() {
     let (_dir, path) = setup_temp_file("a\nb\n", "test.py");
     cmd()
-        .args([path.to_str().unwrap(), "--insert", "-S", "feat", "-l", "1:2", "--atomic"])
+        .args([
+            path.to_str().unwrap(),
+            "--insert",
+            "-S",
+            "feat",
+            "-l",
+            "1:2",
+            "--atomic",
+        ])
         .assert()
         .failure();
 }
@@ -2110,7 +2157,15 @@ fn test_insert_rejects_atomic_combo() {
 fn test_insert_to_end() {
     let (_dir, path) = setup_temp_file("a\nb\nc\n", "test.py");
     cmd()
-        .args([path.to_str().unwrap(), "--insert", "-S", "feat", "-l", "2", "--to-end"])
+        .args([
+            path.to_str().unwrap(),
+            "--insert",
+            "-S",
+            "feat",
+            "-l",
+            "2",
+            "--to-end",
+        ])
         .assert()
         .success();
     let result = fs::read_to_string(&path).unwrap();
@@ -2148,7 +2203,15 @@ fn test_insert_comment_style_override() {
 fn test_insert_dry_run_does_not_write() {
     let (_dir, path) = setup_temp_file("a\nb\n", "test.py");
     cmd()
-        .args([path.to_str().unwrap(), "--insert", "-S", "feat", "-l", "1:2", "--dry-run"])
+        .args([
+            path.to_str().unwrap(),
+            "--insert",
+            "-S",
+            "feat",
+            "-l",
+            "1:2",
+            "--dry-run",
+        ])
         .assert()
         .success();
     let result = fs::read_to_string(&path).unwrap();

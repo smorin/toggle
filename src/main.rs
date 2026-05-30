@@ -308,16 +308,23 @@ fn run(cli: &Cli) -> Result<()> {
     // ── --insert mode validation (P05) ──
     if cli.insert {
         if cli.list_sections {
-            return Err(UsageError("--insert cannot be combined with --list-sections".into()).into());
+            return Err(
+                UsageError("--insert cannot be combined with --list-sections".into()).into(),
+            );
         }
         if cli.force.is_some() {
-            return Err(UsageError("--insert does not take --force (the body is left uncommented)".into()).into());
+            return Err(UsageError(
+                "--insert does not take --force (the body is left uncommented)".into(),
+            )
+            .into());
         }
         if cli.atomic {
             return Err(UsageError("--insert cannot be combined with --atomic".into()).into());
         }
         if cli.recursive {
-            return Err(UsageError("--insert operates on a single file; -R is not allowed".into()).into());
+            return Err(
+                UsageError("--insert operates on a single file; -R is not allowed".into()).into(),
+            );
         }
         if cli.paths.len() != 1 {
             return Err(UsageError("--insert requires exactly one file path".into()).into());

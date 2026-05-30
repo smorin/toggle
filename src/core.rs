@@ -192,7 +192,10 @@ pub fn insert_section(
         .collect();
 
     let start_marker = match desc {
-        Some(d) => format!("{}{} toggle:start ID={} desc=\"{}\"", indent, comment_prefix, id, d),
+        Some(d) => format!(
+            "{}{} toggle:start ID={} desc=\"{}\"",
+            indent, comment_prefix, id, d
+        ),
         None => format!("{}{} toggle:start ID={}", indent, comment_prefix, id),
     };
     let end_marker = format!("{}{} toggle:end ID={}", indent, comment_prefix, id);
