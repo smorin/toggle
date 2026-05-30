@@ -6,9 +6,11 @@
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 
 mod error;
+mod introspect;
 mod mem;
 mod transforms;
 
+pub use introspect::*;
 pub use transforms::*;
 
 use std::ffi::CString;
@@ -149,6 +151,44 @@ mod tests {
         let rc =
             togl_find_and_toggle_section(content.as_ptr(), id.as_ptr(), std::ptr::null(), &mut out);
         assert_eq!(rc, 0);
+        togl_string_free(out);
+    }
+
+    #[test]
+    fn discover_sections_returns_json_array() {
+        let content = CString::new("# toggle:start ID=foo\nx\n# toggle:end ID=foo\n").unwrap();
+        let mut out: *mut c_char = std::ptr::null_mut();
+        let rc = togl_discover_sections(content.as_ptr(), &mut out);
+        assert_eq!(rc, 0);
+        let json = unsafe { CStr::from_ptr(out) }.to_str().unwrap();
+        let v: serde_json::Value = serde_json::from_str(json).unwrap();
+        assert!(v.is_array());
+        assert_eq!(v.as_array().unwrap().len(), 1);
+        togl_string_free(out);
+    }
+
+    #[test]
+    fn scan_sections_json_has_file_label() {
+        let path = CString::new("memory.py").unwrap();
+        let content = CString::new("# toggle:start ID=foo\nx\n# toggle:end ID=foo\n").unwrap();
+        let mut out: *mut c_char = std::ptr::null_mut();
+        let rc = togl_scan_sections(path.as_ptr(), content.as_ptr(), &mut out);
+        assert_eq!(rc, 0);
+        let json = unsafe { CStr::from_ptr(out) }.to_str().unwrap().to_owned();
+        assert!(json.contains("memory.py"), "got: {json}");
+        togl_string_free(out);
+    }
+
+    #[test]
+    fn validate_sections_returns_json_array() {
+        // Unclosed section → at least one issue.
+        let content = CString::new("# toggle:start ID=foo\nx\n").unwrap();
+        let mut out: *mut c_char = std::ptr::null_mut();
+        let rc = togl_validate_sections(content.as_ptr(), 0, &mut out);
+        assert_eq!(rc, 0);
+        let json = unsafe { CStr::from_ptr(out) }.to_str().unwrap();
+        let v: serde_json::Value = serde_json::from_str(json).unwrap();
+        assert!(v.is_array());
         togl_string_free(out);
     }
 }
