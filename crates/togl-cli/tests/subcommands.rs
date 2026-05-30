@@ -26,23 +26,24 @@ fn stdout_of(args: &[&str]) -> String {
     String::from_utf8(out).unwrap()
 }
 
-/// Assert that a read-only subcommand and its legacy equivalent print the same
-/// stdout for identical input files.
+/// Assert that a read-only / dry-run subcommand and its legacy equivalent print
+/// identical stdout. Both forms run against the *same* file, so any path in the
+/// output (e.g. the `file` field in `--json`) is byte-identical without fragile
+/// textual normalization (which broke on Windows, where JSON escapes `\`).
+/// Safe because every caller is non-mutating (scan/check/list/`--dry-run`).
 fn assert_stdout_parity(content: &str, sub: &[&str], legacy: &[&str]) {
     let dir = TempDir::new().unwrap();
-    let a = dir.path().join("a.py");
-    let b = dir.path().join("b.py");
-    fs::write(&a, content).unwrap();
-    fs::write(&b, content).unwrap();
+    let p = dir.path().join("a.py");
+    fs::write(&p, content).unwrap();
+    let path = p.to_str().unwrap();
 
     let mut sub_args: Vec<&str> = sub.to_vec();
-    sub_args.push(a.to_str().unwrap());
+    sub_args.push(path);
     let mut legacy_args: Vec<&str> = legacy.to_vec();
-    legacy_args.push(b.to_str().unwrap());
+    legacy_args.push(path);
 
-    // Normalize the differing temp paths out of the comparison.
-    let sub_out = stdout_of(&sub_args).replace(a.to_str().unwrap(), "<P>");
-    let legacy_out = stdout_of(&legacy_args).replace(b.to_str().unwrap(), "<P>");
+    let sub_out = stdout_of(&sub_args);
+    let legacy_out = stdout_of(&legacy_args);
     assert_eq!(sub_out, legacy_out, "stdout parity: {sub:?} vs {legacy:?}");
 }
 
