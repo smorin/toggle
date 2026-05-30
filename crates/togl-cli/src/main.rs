@@ -462,17 +462,49 @@ fn run_filter(cli: &Cli, opts: &ToggleOptions) -> Result<()> {
         )
         .into());
     }
-    // Only the `-` placeholder may appear in paths; no real files.
-    if cli.paths.iter().any(|p| p.as_os_str() != "-") {
+    // Resolve the single input source. Filter mode always writes to stdout and
+    // never modifies a file; the input is either stdin or one real file:
+    //   * stdin   — a `-` path, `--stdin`, or `--stdout` with no file path.
+    //   * file    — a real file path with `--stdout` (read it, emit to stdout).
+    // A real file gives a real extension, so its comment style is resolved
+    // normally; stdin has no extension and falls back to Python `#` (synthetic
+    // `<stdin>.py`), overridable with `--comment-style`.
+    let real_paths: Vec<&PathBuf> = cli.paths.iter().filter(|p| p.as_os_str() != "-").collect();
+    let has_dash = cli.paths.iter().any(|p| p.as_os_str() == "-");
+
+    if has_dash && !real_paths.is_empty() {
+        return Err(
+            UsageError("cannot mix `-` (stdin) with a file path in filter mode".into()).into(),
+        );
+    }
+    if cli.stdin && !real_paths.is_empty() {
+        return Err(
+            UsageError("--stdin reads from stdin; do not also pass a file path".into()).into(),
+        );
+    }
+    if real_paths.len() > 1 {
         return Err(UsageError(
-            "filter mode reads from stdin; do not pass file paths (use `-`, --stdin, or --stdout)"
-                .into(),
+            "filter mode writes a single stream; pass one file (or read stdin)".into(),
         )
         .into());
     }
 
-    let vpath = PathBuf::from("<stdin>.py");
-    let input = io::read_stdin_encoded(opts.encoding).context("Failed to read input from stdin")?;
+    let (input, vpath) = if let Some(path) = real_paths.first() {
+        if path.is_dir() {
+            return Err(UsageError(format!(
+                "filter mode operates on a single file; '{}' is a directory",
+                path.display()
+            ))
+            .into());
+        }
+        let content = io::read_file_encoded(path, opts.encoding)
+            .with_context(|| format!("Failed to read {}", path.display()))?;
+        (content, (*path).clone())
+    } else {
+        let content =
+            io::read_stdin_encoded(opts.encoding).context("Failed to read input from stdin")?;
+        (content, PathBuf::from("<stdin>.py"))
+    };
 
     let output = if cli.insert {
         if cli.force.is_some() {

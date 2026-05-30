@@ -1,12 +1,16 @@
 //! Tests for stdin/stdout filter mode (Option 3).
 //!
-//! Filter mode is a single stdin→stdout transform with three spellings: a `-`
-//! path, `--stdin`, or `--stdout`. It applies to the writer operations
-//! (toggle/insert/remove) only. The core guarantees:
+//! Filter mode writes a single transformed stream to stdout and never modifies a
+//! file, for the writer operations (toggle/insert/remove) only. The input is
+//! either stdin (`-`, `--stdin`, or `--stdout` with no path) or one real file
+//! (`file --stdout`, whose real extension drives the comment style). The core
+//! guarantees:
 //!   * stdin≡file: the filter output equals the in-place file result, byte for byte.
+//!   * file→stdout: `file --stdout` emits that result and leaves the file untouched.
 //!   * no-op byte identity: an input that triggers no change is emitted verbatim,
 //!     including exact trailing-newline handling.
-//!   * the rejection set: flags that collide with stdout output are refused.
+//!   * the rejection set: flags/inputs that collide with single-stream stdout output
+//!     are refused.
 
 use assert_cmd::Command;
 use std::fs;
@@ -148,21 +152,124 @@ fn rejects_recursive_in_filter_mode() {
 }
 
 #[test]
-fn rejects_real_path_with_stdout() {
-    // A real file path plus --stdout is the matrix the design declined: error.
+fn scan_rejects_stdin_flag() {
+    // Read-only ops are not filter-mode writers.
     cmd()
-        .args(["toggle", "somefile.py", "--stdout", "-S", "feat"])
+        .args(["--scan", "--stdin"])
+        .write_stdin(SECTION_FILE)
+        .assert()
+        .failure();
+}
+
+// ── file → stdout (`--stdout` with a real file path) ──
+
+#[test]
+fn file_to_stdout_equals_in_place_result() {
+    // `file --stdout` emits the same bytes the in-place transform would write.
+    let dir = TempDir::new().unwrap();
+    let read_only = dir.path().join("ro.py");
+    fs::write(&read_only, SECTION_FILE).unwrap();
+    let out = cmd()
+        .args([read_only.to_str().unwrap(), "--stdout", "-S", "feat"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+
+    let in_place = file_result(SECTION_FILE, &["-S", "feat"]);
+    assert_eq!(out, in_place);
+}
+
+#[test]
+fn file_to_stdout_leaves_file_unmodified() {
+    let dir = TempDir::new().unwrap();
+    let p = dir.path().join("keep.py");
+    fs::write(&p, SECTION_FILE).unwrap();
+    cmd()
+        .args([p.to_str().unwrap(), "--stdout", "-S", "feat"])
+        .assert()
+        .success();
+    assert_eq!(fs::read_to_string(&p).unwrap(), SECTION_FILE);
+}
+
+#[test]
+fn file_to_stdout_uses_real_extension_comment_style() {
+    // The point of file→stdout: comment style comes from the real extension.
+    // A `.js` file must use `//`, not the synthetic-stdin Python `#` default.
+    let dir = TempDir::new().unwrap();
+    let js = dir.path().join("app.js");
+    fs::write(
+        &js,
+        "// toggle:start ID=feat\nconsole.log(1)\n// toggle:end ID=feat\n",
+    )
+    .unwrap();
+    let out = cmd()
+        .args([js.to_str().unwrap(), "--stdout", "-S", "feat"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let s = String::from_utf8(out).unwrap();
+    assert!(
+        s.contains("// console.log(1)"),
+        "expected // comment, got:\n{s}"
+    );
+}
+
+#[test]
+fn rejects_dash_mixed_with_file_path() {
+    cmd()
+        .args(["toggle", "-", "somefile.py", "--stdout", "-S", "feat"])
         .write_stdin(SECTION_FILE)
         .assert()
         .failure();
 }
 
 #[test]
-fn scan_rejects_stdin_flag() {
-    // Read-only ops are not filter-mode writers.
+fn rejects_stdin_flag_with_file_path() {
+    let dir = TempDir::new().unwrap();
+    let p = dir.path().join("f.py");
+    fs::write(&p, SECTION_FILE).unwrap();
     cmd()
-        .args(["--scan", "--stdin"])
+        .args(["toggle", p.to_str().unwrap(), "--stdin", "-S", "feat"])
         .write_stdin(SECTION_FILE)
+        .assert()
+        .failure();
+}
+
+#[test]
+fn rejects_multiple_files_with_stdout() {
+    let dir = TempDir::new().unwrap();
+    let a = dir.path().join("a.py");
+    let b = dir.path().join("b.py");
+    fs::write(&a, SECTION_FILE).unwrap();
+    fs::write(&b, SECTION_FILE).unwrap();
+    cmd()
+        .args([
+            "toggle",
+            a.to_str().unwrap(),
+            b.to_str().unwrap(),
+            "--stdout",
+            "-S",
+            "feat",
+        ])
+        .assert()
+        .failure();
+}
+
+#[test]
+fn rejects_directory_with_stdout() {
+    let dir = TempDir::new().unwrap();
+    cmd()
+        .args([
+            "toggle",
+            dir.path().to_str().unwrap(),
+            "--stdout",
+            "-S",
+            "feat",
+        ])
         .assert()
         .failure();
 }

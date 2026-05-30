@@ -131,22 +131,28 @@ write the transformed result to stdout, leaving any file untouched — so `toggl
 composes in a pipeline. Use a `-` path, or the `--stdin` / `--stdout` aliases:
 
 ```bash
-# Toggle a section, reading stdin and writing stdout
+# stdin → stdout: read stdin, write the result to stdout
 cat main.py | toggle - -S featureX
 
-# Equivalent spellings
+# Equivalent spellings for stdin → stdout
 toggle --stdin  -S featureX < main.py
 toggle --stdout -S featureX < main.py
 
+# file → stdout: transform a real file, print the result, leave the file on disk
+# untouched (the prettier / clang-format model; great for editor integration).
+toggle main.py --stdout -S featureX
+
 # Works with the subcommands too
 toggle remove --stdin -S featureX < main.py
-toggle insert --stdin -S featureX -l 10:20 < main.py > wrapped.py
+toggle insert main.py --stdout -S featureX -l 10:20 > wrapped.py
 ```
 
-Piped input has no file extension, so the comment style defaults to `#`
-(Python); pass `--comment-style` for other languages. Filter mode is a single
-stdin→stdout transform: it does not accept file paths, `--json`, `--atomic`,
-`--backup`, `--dry-run`, `--interactive`, or `-R`.
+With `file --stdout`, the comment style is resolved from the file's real
+extension. Piped (stdin) input has no extension, so it defaults to `#` (Python);
+pass `--comment-style` for other languages. Filter mode is always a single
+stream to stdout and never modifies a file, so it does not accept multiple
+files, directories, `--json`, `--atomic`, `--backup`, `--dry-run`,
+`--interactive`, or `-R`.
 
 ## Atomic multi-file mode
 

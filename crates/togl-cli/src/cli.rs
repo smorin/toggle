@@ -143,8 +143,9 @@ pub struct Cli {
     #[arg(long = "stdin")]
     pub stdin: bool,
 
-    /// Write the transformed result to stdout instead of modifying files
-    /// (filter mode). A spelling of stdin filter mode; reads from stdin.
+    /// Write the transformed result to stdout instead of modifying files.
+    /// With a file path, reads that file (real extension → comment style);
+    /// with no path, reads stdin. Only valid for toggle/insert/remove.
     #[arg(long = "stdout")]
     pub stdout: bool,
 
@@ -332,8 +333,9 @@ impl GlobalArgs {
 }
 
 /// Filter-mode flags, shared by the writer subcommands (toggle/insert/remove).
-/// Both `--stdin` and `--stdout` are spellings of the same stdin→stdout filter
-/// mode (the classic `-` path is the third spelling).
+/// Filter-mode flags. `--stdin` (= the classic `-` path) reads stdin and writes
+/// stdout. `--stdout` writes stdout but reads a file path when one is given
+/// (so the comment style comes from its real extension), else reads stdin.
 #[derive(clap::Args, Debug)]
 pub struct FilterArgs {
     /// Read input from stdin and write to stdout (filter mode). Same as `-`.
