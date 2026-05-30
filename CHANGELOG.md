@@ -3,6 +3,20 @@
 All notable changes are listed here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [SemVer](https://semver.org/).
 
+## [0.5.0](https://github.com/smorin/toggle/compare/v0.4.0...v0.5.0) (2026-05-30)
+
+
+### Features
+
+* **cli:** add --fields filter to --list-sections (P07) ([#32](https://github.com/smorin/toggle/issues/32)) ([bc52dba](https://github.com/smorin/toggle/commit/bc52dbaca739a45ad8b7c71f3f591be102a20ac3))
+* **cli:** add --remove for recursive section stripping (P06) ([#34](https://github.com/smorin/toggle/issues/34)) ([84a947b](https://github.com/smorin/toggle/commit/84a947b7766b306c2f5f44705dbb0acc60cc1326))
+* **cli:** subcommands + stdin/stdout filter mode (ergonomics 2-3/3) ([#36](https://github.com/smorin/toggle/issues/36)) ([c7309b8](https://github.com/smorin/toggle/commit/c7309b81638af82842c09a0df18a09887628bb85))
+
+
+### Refactor
+
+* **cli:** enforce flag constraints declaratively via clap ([#35](https://github.com/smorin/toggle/issues/35)) ([27f2fa3](https://github.com/smorin/toggle/commit/27f2fa392897d7d919b15d0836d5a1eaf2e4b575))
+
 ## [0.4.0](https://github.com/smorin/toggle/compare/v0.3.0...v0.4.0) (2026-05-30)
 
 
