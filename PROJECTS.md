@@ -159,3 +159,31 @@ See `docs/superpowers/specs/2026-05-29-togl-c-abi-library-design.md` and
 
 ### Detailed Implementation Plan
 See `docs/superpowers/plans/2026-05-29-togl-ffi-c-library.md`
+
+---
+
+## [-] Project P09: Release automation (release-please + commitlint) (v0.3.0)
+**Goal**: Add PR-driven, Conventional-Commit-based releases modeled on
+py-launch-blueprint, adapted to the Rust workspace: release-please opens a
+release PR (bumps `[workspace.package].version` + `CHANGELOG.md`); merging it
+tags `v*` which triggers the existing `release.yml` binary build. commitlint
+enforces Conventional Commits on PRs.
+See `docs/superpowers/specs/2026-05-29-release-please-commitlint-design.md`.
+
+**Out of Scope**
+- A crates.io publish workflow (separate follow-on)
+- Creating the GitHub App / repo secrets (manual; see RELEASE.md)
+
+### Tests & Tasks
+- [x] [P09-T01] `release-please-config.json` (simple + extra-files for Cargo.toml workspace version), `.release-please-manifest.json`
+- [x] [P09-T02] `.github/workflows/release-please.yml` (App/PAT auth, sync-cargo-lock job)
+- [x] [P09-T03] `commitlint.yml` + `commitlint.config.mjs` + `commitlint.dependabot.config.mjs` + `package.json`
+- [x] [P09-T04] `RELEASE.md` (flow, disabling, token setup, first-release cutover)
+
+### Automated Verification
+- `release-please-config.json` / `.release-please-manifest.json` are valid JSON
+- `commitlint.config.mjs` / `commitlint.dependabot.config.mjs` parse as ES modules
+- `actionlint` clean on both new workflows
+
+### Manual Steps (maintainer)
+- Add `RELEASE_PLEASE_APP_ID` + `RELEASE_PLEASE_PRIVATE_KEY` (GitHub App) or `RELEASE_PLEASE_APP_TOKEN` (PAT) secrets.
