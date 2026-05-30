@@ -896,7 +896,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "toggle-cli"
+name = "togl-cli"
 version = "0.2.3"
 dependencies = [
  "anyhow",
@@ -910,11 +910,11 @@ dependencies = [
  "serde_json",
  "signal-hook",
  "tempfile",
- "toggle-lib",
+ "togl-lib",
 ]
 
 [[package]]
-name = "toggle-lib"
+name = "togl-lib"
 version = "0.2.3"
 dependencies = [
  "anyhow",

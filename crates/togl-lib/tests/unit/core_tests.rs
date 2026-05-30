@@ -1,5 +1,5 @@
 use std::path::Path;
-use toggle_lib::core::{
+use togl_lib::core::{
     find_and_toggle_section, get_comment_style, insert_section, merge_ranges, parse_line_range,
     scan_sections, supported_extensions, toggle_comments, CommentStyle, LineRange,
 };
@@ -347,7 +347,7 @@ fn test_scan_sections_javascript_comment_style() {
 #[test]
 fn parse_id_parts_solo() {
     assert_eq!(
-        toggle_lib::core::parse_id_parts("debug"),
+        togl_lib::core::parse_id_parts("debug"),
         ("debug".to_string(), None)
     );
 }
@@ -355,14 +355,14 @@ fn parse_id_parts_solo() {
 #[test]
 fn parse_id_parts_variant() {
     assert_eq!(
-        toggle_lib::core::parse_id_parts("db:postgres"),
+        togl_lib::core::parse_id_parts("db:postgres"),
         ("db".to_string(), Some("postgres".to_string()))
     );
 }
 
 #[test]
 fn parse_id_parts_empty_variant_treated_as_solo() {
-    let (g, v) = toggle_lib::core::parse_id_parts("db:");
+    let (g, v) = togl_lib::core::parse_id_parts("db:");
     assert_eq!(g, "db");
     assert_eq!(v, Some("".to_string()));
 }
@@ -370,7 +370,7 @@ fn parse_id_parts_empty_variant_treated_as_solo() {
 #[test]
 fn parse_id_parts_multiple_colons_uses_first() {
     assert_eq!(
-        toggle_lib::core::parse_id_parts("a:b:c"),
+        togl_lib::core::parse_id_parts("a:b:c"),
         ("a".to_string(), Some("b:c".to_string()))
     );
 }
@@ -393,7 +393,7 @@ print("debug")
 
 #[test]
 fn discover_variants_returns_pair() {
-    let v = toggle_lib::core::discover_variants(VARIANTS_FIXTURE, "db");
+    let v = togl_lib::core::discover_variants(VARIANTS_FIXTURE, "db");
     assert_eq!(v.len(), 2);
     let ids: Vec<&str> = v.iter().map(|s| s.id.as_str()).collect();
     assert!(ids.contains(&"db:sqlite"));
@@ -402,31 +402,31 @@ fn discover_variants_returns_pair() {
 
 #[test]
 fn discover_variants_solo_only() {
-    let v = toggle_lib::core::discover_variants(VARIANTS_FIXTURE, "debug");
+    let v = togl_lib::core::discover_variants(VARIANTS_FIXTURE, "debug");
     assert_eq!(v.len(), 1);
     assert_eq!(v[0].id, "debug");
 }
 
 #[test]
 fn discover_variants_no_match() {
-    let v = toggle_lib::core::discover_variants(VARIANTS_FIXTURE, "missing");
+    let v = togl_lib::core::discover_variants(VARIANTS_FIXTURE, "missing");
     assert!(v.is_empty());
 }
 
 #[test]
 fn discover_variants_distinguishes_groups() {
     // Prefix collision guard: "db" must NOT match "debug".
-    let v = toggle_lib::core::discover_variants(VARIANTS_FIXTURE, "db");
+    let v = togl_lib::core::discover_variants(VARIANTS_FIXTURE, "db");
     for s in &v {
-        let (g, _) = toggle_lib::core::parse_id_parts(&s.id);
+        let (g, _) = togl_lib::core::parse_id_parts(&s.id);
         assert_eq!(g, "db");
     }
 }
 
 // ── toggle_variant_group / activate_variant ──
 
-fn comment_style_py() -> toggle_lib::core::CommentStyle {
-    toggle_lib::core::CommentStyle {
+fn comment_style_py() -> togl_lib::core::CommentStyle {
+    togl_lib::core::CommentStyle {
         single_line: "#".to_string(),
         multi_line_start: None,
         multi_line_end: None,
@@ -437,7 +437,7 @@ fn comment_style_py() -> toggle_lib::core::CommentStyle {
 fn toggle_variant_group_pair_flip_swaps_states() {
     // Initial in fixture: db:sqlite uncommented, db:postgres commented.
     let result =
-        toggle_lib::core::toggle_variant_group(VARIANTS_FIXTURE, "db", &None, &comment_style_py())
+        togl_lib::core::toggle_variant_group(VARIANTS_FIXTURE, "db", &None, &comment_style_py())
             .unwrap();
     assert!(result.contains("# import sqlite3"));
     assert!(result.contains("\nimport psycopg2"));
@@ -445,7 +445,7 @@ fn toggle_variant_group_pair_flip_swaps_states() {
 
 #[test]
 fn toggle_variant_group_force_on_comments_all() {
-    let result = toggle_lib::core::toggle_variant_group(
+    let result = togl_lib::core::toggle_variant_group(
         VARIANTS_FIXTURE,
         "db",
         &Some("on".to_string()),
@@ -458,7 +458,7 @@ fn toggle_variant_group_force_on_comments_all() {
 
 #[test]
 fn toggle_variant_group_force_off_uncomments_all() {
-    let result = toggle_lib::core::toggle_variant_group(
+    let result = togl_lib::core::toggle_variant_group(
         VARIANTS_FIXTURE,
         "db",
         &Some("off".to_string()),
@@ -484,7 +484,7 @@ x = 1
 # z = 3
 # toggle:end ID=cache:inmemory
 "#;
-    let err = toggle_lib::core::toggle_variant_group(three, "cache", &None, &comment_style_py())
+    let err = togl_lib::core::toggle_variant_group(three, "cache", &None, &comment_style_py())
         .unwrap_err();
     let msg = format!("{err}");
     assert!(msg.contains("3 variants"), "got: {msg}");
@@ -494,7 +494,7 @@ x = 1
 #[test]
 fn activate_variant_uncomments_target_and_comments_others() {
     let result =
-        toggle_lib::core::activate_variant(VARIANTS_FIXTURE, "db", "postgres", &comment_style_py())
+        togl_lib::core::activate_variant(VARIANTS_FIXTURE, "db", "postgres", &comment_style_py())
             .unwrap();
     assert!(result.contains("\nimport psycopg2"));
     assert!(result.contains("# import sqlite3"));
@@ -503,7 +503,7 @@ fn activate_variant_uncomments_target_and_comments_others() {
 #[test]
 fn activate_variant_unknown_variant_errors() {
     let err =
-        toggle_lib::core::activate_variant(VARIANTS_FIXTURE, "db", "mysql", &comment_style_py())
+        togl_lib::core::activate_variant(VARIANTS_FIXTURE, "db", "mysql", &comment_style_py())
             .unwrap_err();
     assert!(format!("{err}").contains("mysql"));
 }
@@ -512,7 +512,7 @@ fn activate_variant_unknown_variant_errors() {
 
 #[test]
 fn summarize_scan_infers_types() {
-    use toggle_lib::core::SectionType;
+    use togl_lib::core::SectionType;
     let content = r#"
 # toggle:start ID=db:sqlite
 x = 1
@@ -539,7 +539,7 @@ c = 6
 # toggle:end ID=debug
 "#;
     let sections = scan_sections(Path::new("t.py"), content);
-    let summary = toggle_lib::core::summarize_scan(&sections);
+    let summary = togl_lib::core::summarize_scan(&sections);
 
     let by_group = |g: &str| {
         summary
@@ -583,16 +583,16 @@ print("x")
 fn scan_one(
     path: &str,
     content: &str,
-) -> (std::path::PathBuf, Vec<toggle_lib::core::ScanSectionInfo>) {
+) -> (std::path::PathBuf, Vec<togl_lib::core::ScanSectionInfo>) {
     let p = std::path::PathBuf::from(path);
-    let v = toggle_lib::core::scan_sections(&p, content);
+    let v = togl_lib::core::scan_sections(&p, content);
     (p, v)
 }
 
 #[test]
 fn validate_flags_unclosed_marker() {
     let (p, v) = scan_one("a.py", "# toggle:start ID=foo\nx = 1\n");
-    let issues = toggle_lib::core::validate_sections(&[(p, v)], false);
+    let issues = togl_lib::core::validate_sections(&[(p, v)], false);
     assert!(
         issues.iter().any(|i| i.message.contains("unclosed")),
         "issues: {issues:?}"
@@ -615,7 +615,7 @@ x = 1
 # toggle:end ID=cache:inmemory
 "#;
     let (p, v) = scan_one("a.py", three);
-    let issues = toggle_lib::core::validate_sections(&[(p, v)], true);
+    let issues = togl_lib::core::validate_sections(&[(p, v)], true);
     assert!(
         issues
             .iter()
@@ -636,7 +636,7 @@ y = 2
 # toggle:end ID=foo
 "#;
     let (p, v) = scan_one("a.py", dup);
-    let issues = toggle_lib::core::validate_sections(&[(p, v)], false);
+    let issues = togl_lib::core::validate_sections(&[(p, v)], false);
     assert!(
         issues.iter().any(|i| i.message.contains("duplicate")),
         "issues: {issues:?}"
@@ -660,7 +660,7 @@ z = 3
 # toggle:end ID=db:sqlite
 "#;
     let issues =
-        toggle_lib::core::validate_sections(&[scan_one("a.py", a), scan_one("b.py", b)], false);
+        togl_lib::core::validate_sections(&[scan_one("a.py", a), scan_one("b.py", b)], false);
     assert!(
         issues
             .iter()
@@ -673,7 +673,7 @@ z = 3
 
 #[test]
 fn build_scan_json_emits_solo_and_grouped_entries() {
-    use toggle_lib::core::{build_scan_json, ScanJsonEntry, SectionType};
+    use togl_lib::core::{build_scan_json, ScanJsonEntry, SectionType};
     let content = r#"
 # toggle:start ID=db:sqlite
 x = 1

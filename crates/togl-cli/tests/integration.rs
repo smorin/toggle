@@ -1667,8 +1667,8 @@ fn test_recover_from_staged_journal() {
     fs::write(&target, "original\n").unwrap();
     fs::write(&temp, "modified\n").unwrap();
 
-    let journal = toggle_lib::journal::Journal::new(
-        vec![toggle_lib::journal::JournalEntry {
+    let journal = togl_lib::journal::Journal::new(
+        vec![togl_lib::journal::JournalEntry {
             target_path: target.clone(),
             temp_path: temp.clone(),
             backup_path: None,
@@ -1678,7 +1678,7 @@ fn test_recover_from_staged_journal() {
         false,
     );
     let journal_path = dir.path().join(".toggle-atomic.journal");
-    toggle_lib::journal::persist_journal(&journal, &journal_path).unwrap();
+    togl_lib::journal::persist_journal(&journal, &journal_path).unwrap();
 
     // Run --recover
     cmd()

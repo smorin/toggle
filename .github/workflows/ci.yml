@@ -118,7 +118,7 @@ jobs:
 
       - uses: obi1kenobi/cargo-semver-checks-action@5b298c9520f7096a4683c0bd981a7ac5a7e249ae # v2.8
         with:
-          package: toggle-lib
+          package: togl-lib
           # Compare against this repo's main branch, not the unrelated
           # "toggle" crate on crates.io which has a different API surface.
           baseline-rev: origin/main

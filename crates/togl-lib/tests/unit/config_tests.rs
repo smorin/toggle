@@ -1,4 +1,4 @@
-use toggle_lib::config::ToggleConfig;
+use togl_lib::config::ToggleConfig;
 
 #[test]
 fn test_parse_full_config() {
