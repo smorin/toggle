@@ -1,7 +1,7 @@
 use std::path::Path;
 use toggle::core::{
-    find_and_toggle_section, get_comment_style, merge_ranges, parse_line_range, scan_sections,
-    supported_extensions, toggle_comments, CommentStyle, LineRange,
+    find_and_toggle_section, get_comment_style, insert_section, merge_ranges, parse_line_range,
+    scan_sections, supported_extensions, toggle_comments, CommentStyle, LineRange,
 };
 
 // ── parse_line_range ──
@@ -729,4 +729,45 @@ print("d")
         }
         _ => panic!("expected Group"),
     }
+}
+
+// ── insert_section ──
+
+#[test]
+fn test_insert_section_basic() {
+    let content = "a\nb\nc\nd\n";
+    // Wrap lines 2..3 (1-based inclusive) with ID=feat
+    let result = insert_section(content, "feat", None, 2, 3, "#").unwrap();
+    assert_eq!(
+        result,
+        "a\n# toggle:start ID=feat\nb\nc\n# toggle:end ID=feat\nd\n"
+    );
+}
+
+#[test]
+fn test_insert_section_with_desc() {
+    let content = "a\nb\n";
+    let result = insert_section(content, "feat", Some("hello world"), 1, 2, "//").unwrap();
+    assert_eq!(
+        result,
+        "// toggle:start ID=feat desc=\"hello world\"\na\nb\n// toggle:end ID=feat\n"
+    );
+}
+
+#[test]
+fn test_insert_section_matches_indentation() {
+    let content = "def f():\n    x = 1\n    y = 2\n";
+    // Wrap the two indented lines (2..3)
+    let result = insert_section(content, "feat", None, 2, 3, "#").unwrap();
+    assert_eq!(
+        result,
+        "def f():\n    # toggle:start ID=feat\n    x = 1\n    y = 2\n    # toggle:end ID=feat\n"
+    );
+}
+
+#[test]
+fn test_insert_section_no_trailing_newline() {
+    let content = "a\nb"; // no trailing newline
+    let result = insert_section(content, "feat", None, 1, 2, "#").unwrap();
+    assert_eq!(result, "# toggle:start ID=feat\na\nb\n# toggle:end ID=feat");
 }

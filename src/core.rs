@@ -141,6 +141,74 @@ pub fn discover_variants(content: &str, group: &str) -> Vec<SectionInfo> {
         .collect()
 }
 
+/// Insert a `toggle:start`/`toggle:end` marker pair around the 1-based inclusive
+/// line range `[start, end]`. Markers inherit the leading whitespace of the
+/// `start` line and use `comment_prefix` (e.g. `"#"`, `"//"`). The body is left
+/// unchanged (uncommented). Returns the new file content.
+///
+/// Errors if the range is invalid, out of bounds, the ID/desc is malformed, or
+/// a section with `id` already exists in the file.
+pub fn insert_section(
+    content: &str,
+    id: &str,
+    desc: Option<&str>,
+    start: usize,
+    end: usize,
+    comment_prefix: &str,
+) -> Result<String> {
+    if id.is_empty() || id.contains(char::is_whitespace) || id.contains('"') {
+        return Err(UsageError(format!("Invalid section ID: '{}'", id)).into());
+    }
+    if let Some(d) = desc {
+        if d.contains('"') {
+            return Err(UsageError("Section description must not contain '\"'".into()).into());
+        }
+    }
+    if start == 0 || end < start {
+        return Err(UsageError(format!("Invalid line range: {}:{}", start, end)).into());
+    }
+
+    let mut lines: Vec<String> = content.lines().map(String::from).collect();
+    if end > lines.len() {
+        return Err(UsageError(format!(
+            "Line range {}:{} exceeds file length ({} lines)",
+            start,
+            end,
+            lines.len()
+        ))
+        .into());
+    }
+
+    // Duplicate-ID guard: refuse if any start marker already uses this ID.
+    for line in &lines {
+        if line_matches_start(line, id) {
+            return Err(UsageError(format!("Section ID '{}' already exists in file", id)).into());
+        }
+    }
+
+    let indent: String = lines[start - 1]
+        .chars()
+        .take_while(|c| c.is_whitespace())
+        .collect();
+
+    let start_marker = match desc {
+        Some(d) => format!("{}{} toggle:start ID={} desc=\"{}\"", indent, comment_prefix, id, d),
+        None => format!("{}{} toggle:start ID={}", indent, comment_prefix, id),
+    };
+    let end_marker = format!("{}{} toggle:end ID={}", indent, comment_prefix, id);
+
+    // Insert bottom-up so the start index stays valid: end marker goes after
+    // line `end` (0-based index `end`), start marker before line `start`.
+    lines.insert(end, end_marker);
+    lines.insert(start - 1, start_marker);
+
+    let mut result = lines.join("\n");
+    if content.ends_with('\n') {
+        result.push('\n');
+    }
+    Ok(result)
+}
+
 /// Scan file content for toggle:start / toggle:end markers.
 /// Returns all sections found with state info. Does not modify anything.
 pub fn scan_sections(path: &Path, content: &str) -> Vec<ScanSectionInfo> {
