@@ -1667,8 +1667,8 @@ fn test_recover_from_staged_journal() {
     fs::write(&target, "original\n").unwrap();
     fs::write(&temp, "modified\n").unwrap();
 
-    let journal = toggle::journal::Journal::new(
-        vec![toggle::journal::JournalEntry {
+    let journal = toggle_lib::journal::Journal::new(
+        vec![toggle_lib::journal::JournalEntry {
             target_path: target.clone(),
             temp_path: temp.clone(),
             backup_path: None,
@@ -1678,7 +1678,7 @@ fn test_recover_from_staged_journal() {
         false,
     );
     let journal_path = dir.path().join(".toggle-atomic.journal");
-    toggle::journal::persist_journal(&journal, &journal_path).unwrap();
+    toggle_lib::journal::persist_journal(&journal, &journal_path).unwrap();
 
     // Run --recover
     cmd()
@@ -1977,7 +1977,7 @@ fn scan_json_emits_nested_tree() {
         .find(|e| e["id"] == "debug")
         .expect("debug entry");
     assert_eq!(debug["type"], "solo");
-    assert!(debug["files"].as_array().unwrap().len() >= 1);
+    assert!(!debug["files"].as_array().unwrap().is_empty());
 
     // Pair: db
     let db = sections

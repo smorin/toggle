@@ -5,13 +5,14 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use toggle::cli::Cli;
-use toggle::config::ToggleConfig;
-use toggle::core;
-use toggle::exit_codes::{ExitCode, UsageError};
-use toggle::io;
-use toggle::journal;
-use toggle::walk;
+mod cli;
+use cli::Cli;
+use toggle_lib::config::ToggleConfig;
+use toggle_lib::core;
+use toggle_lib::exit_codes::{ExitCode, UsageError};
+use toggle_lib::io;
+use toggle_lib::journal;
+use toggle_lib::walk;
 
 /// Bundled options passed through the toggle pipeline.
 struct ToggleOptions<'a> {
