@@ -30,9 +30,9 @@
 - `main.rs::resolve_comment_style(path, opts) -> Result<core::CommentStyle>` applies `--comment-style` override then falls back to `get_comment_style` (`src/main.rs:887`). `CommentStyle.single_line: String` is the prefix to use.
 - Integration test helpers `setup_temp_file(content, filename)` and `cmd()` already exist (`tests/integration.rs:11`).
 
-### Out of scope for P05
+### EOL handling
 
-- **`--eol` normalization on insert.** `insert_section` mirrors `toggle_comments_inner`'s LF-based reconstruction (`lines.join("\n")` + preserved trailing newline). It does not re-apply `--eol` normalization. On CRLF files the inserted markers use LF line endings. This matches the existing pure-transform pattern and is acceptable for P05; revisit only if a CRLF requirement surfaces.
+`insert_section` is a pure transform that builds output with LF (`lines.join("\n")` + preserved trailing newline). To stay consistent with the normal toggle paths, `run_insert` applies `io::normalize_eol(&modified, opts.eol)` after `insert_section` and before `apply_changes`, so `--insert --eol crlf` emits CRLF just like a normal toggle. (Resolved during final review; covered by `test_insert_respects_eol_crlf`.)
 
 ---
 
