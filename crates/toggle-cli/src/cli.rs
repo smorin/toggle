@@ -28,6 +28,15 @@ pub struct Cli {
     #[arg(long = "list-sections")]
     pub list_sections: bool,
 
+    /// Insert a toggle:start/end marker pair around a single -l range (single file).
+    /// Requires exactly one -S <ID> and one -l <range>. Leaves the body uncommented.
+    #[arg(long = "insert")]
+    pub insert: bool,
+
+    /// Description for the inserted section marker (use with --insert).
+    #[arg(long = "desc")]
+    pub desc: Option<String>,
+
     /// Force toggle state (on/off/invert)
     #[arg(short = 'f', long = "force", visible_short_alias = 'F')]
     pub force: Option<String>,

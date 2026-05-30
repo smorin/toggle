@@ -66,6 +66,21 @@ import sqlite3
 | `toggle -S db --force on file.py` | **Force all** — comment every variant in `db` |
 | `toggle -S db --pair file.py` | **Guard** — fail before any write if `db` does not have exactly 2 variants |
 
+## Inserting a section
+
+Wrap an existing line range in marker comments without commenting the body:
+
+```bash
+# Wrap lines 10–20 of main.py in an ID=featureX marker pair
+toggle --insert -S featureX -l 10:20 main.py
+
+# With a description
+toggle --insert -S featureX -l 10:20 --desc "new feature" main.py
+```
+
+`--insert` operates on a single file and leaves the body uncommented. Run
+`toggle -S featureX main.py` afterward to comment the block.
+
 ## Scan & check
 
 ```bash

@@ -249,6 +249,9 @@ fn run(cli: &Cli) -> Result<()> {
     // Handle --scan mode early (read-only, no toggle options needed).
     // Per PRD §0.14.2, --scan -S <id> is the detailed group view, so --section is allowed here.
     if cli.scan {
+        if cli.insert {
+            return Err(UsageError("--scan cannot be combined with --insert".into()).into());
+        }
         if !cli.lines.is_empty() {
             return Err(UsageError("--scan cannot be combined with --line".into()).into());
         }
@@ -277,6 +280,9 @@ fn run(cli: &Cli) -> Result<()> {
 
     // Validate --pair: pre-execution guard per PRD §0.13.4
     if cli.pair {
+        if cli.insert {
+            return Err(UsageError("--insert cannot be combined with --pair".into()).into());
+        }
         if cli.sections.is_empty() {
             return Err(UsageError("--pair requires at least one -S <group>".into()).into());
         }
@@ -303,6 +309,40 @@ fn run(cli: &Cli) -> Result<()> {
         }
     }
 
+    // ── --insert mode validation (P05) ──
+    if cli.insert {
+        if cli.list_sections {
+            return Err(
+                UsageError("--insert cannot be combined with --list-sections".into()).into(),
+            );
+        }
+        if cli.force.is_some() {
+            return Err(UsageError(
+                "--insert does not take --force (the body is left uncommented)".into(),
+            )
+            .into());
+        }
+        if cli.atomic {
+            return Err(UsageError("--insert cannot be combined with --atomic".into()).into());
+        }
+        if cli.recursive {
+            return Err(
+                UsageError("--insert operates on a single file; -R is not allowed".into()).into(),
+            );
+        }
+        if cli.paths.len() != 1 {
+            return Err(UsageError("--insert requires exactly one file path".into()).into());
+        }
+        if cli.sections.len() != 1 {
+            return Err(UsageError("--insert requires exactly one -S <ID>".into()).into());
+        }
+        if cli.lines.len() != 1 {
+            return Err(UsageError("--insert requires exactly one -l <range>".into()).into());
+        }
+    } else if cli.desc.is_some() {
+        return Err(UsageError("--desc is only valid with --insert".into()).into());
+    }
+
     let opts = ToggleOptions {
         force: &effective_force,
         mode: &effective_mode,
@@ -320,7 +360,9 @@ fn run(cli: &Cli) -> Result<()> {
         interactive: cli.interactive,
     };
 
-    if cli.list_sections {
+    if cli.insert {
+        run_insert(cli, &opts)
+    } else if cli.list_sections {
         run_list_sections(cli, &opts)
     } else if cli.atomic {
         run_atomic(cli, &opts)
@@ -703,6 +745,41 @@ fn run_json(cli: &Cli, opts: &ToggleOptions) -> Result<()> {
 }
 
 type SectionAggregation = (Option<String>, Vec<(String, usize, usize)>);
+
+fn run_insert(cli: &Cli, opts: &ToggleOptions) -> Result<()> {
+    let path = &cli.paths[0];
+    let comment_prefix = resolve_comment_style(path, opts)?.single_line;
+    let content = io::read_file_encoded(path, opts.encoding)?;
+
+    let (start, mut end) = core::parse_line_range(&cli.lines[0])?;
+    if opts.to_end {
+        end = content.lines().count();
+    }
+
+    let id = &cli.sections[0];
+    let modified = core::insert_section(
+        &content,
+        id,
+        cli.desc.as_deref(),
+        start,
+        end,
+        &comment_prefix,
+    )?;
+    let modified = io::normalize_eol(&modified, opts.eol);
+
+    apply_changes(path, &content, &modified, opts)?;
+
+    if opts.verbose {
+        eprintln!(
+            "Inserted section '{}' into {} (lines {}-{})",
+            id,
+            path.display(),
+            start,
+            end
+        );
+    }
+    Ok(())
+}
 
 fn run_list_sections(cli: &Cli, opts: &ToggleOptions) -> Result<()> {
     let walk_opts = walk::WalkOptions {
