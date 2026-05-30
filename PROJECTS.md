@@ -110,3 +110,17 @@ mismatches, and duplicate IDs within a single file.
 - [x] [P04-TS02] Integration tests
 - [x] [P04-T04] Behavior with `--check --pair` (only checks pair-inferred groups)
 - [x] [P04-T05] Run `just dev`
+
+---
+
+## [x] Project P05: `--insert` Marker Insertion (v0.3.0)
+**Goal**: Add a `--insert` mode that wraps a single file's `-l start:end` block
+in a `toggle:start`/`toggle:end` marker pair, leaving the body uncommented.
+See `docs/superpowers/specs/2026-05-29-marker-insert-strip-list-filters-design.md`.
+
+### Tests & Tasks
+- [x] [P05-T01] `core::insert_section` happy path + unit tests
+- [x] [P05-T02] `insert_section` guards (dup ID, bounds, bad id/desc) + unit tests
+- [x] [P05-T03] `--insert` / `--desc` CLI flags, validation, `run_insert` + integration tests
+- [x] [P05-T04] `--to-end`, `--comment-style`, `--dry-run` integration tests
+- [x] [P05-T05] README + PROJECTS.md + `just dev`
