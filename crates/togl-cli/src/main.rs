@@ -84,9 +84,16 @@ fn build_command() -> clap::Command {
         .bin_name(bin_name)
 }
 
-fn main() {
+/// Parse argv through the canonical clap command, exiting the process on a
+/// parse error (mirroring clap's default behavior, but routed through our
+/// custom `build_command()` so binary-name aliasing is preserved).
+fn parse_cli<I, T>(argv: I) -> Cli
+where
+    I: IntoIterator<Item = T>,
+    T: Into<std::ffi::OsString> + Clone,
+{
     let mut cmd = build_command();
-    let matches = match cmd.try_get_matches_from_mut(std::env::args_os()) {
+    let matches = match cmd.try_get_matches_from_mut(argv) {
         Ok(m) => m,
         Err(e) => {
             let kind = e.kind();
@@ -105,12 +112,31 @@ fn main() {
             });
         }
     };
-    let cli = match <Cli as clap::FromArgMatches>::from_arg_matches(&matches) {
+    match <Cli as clap::FromArgMatches>::from_arg_matches(&matches) {
         Ok(c) => c,
         Err(e) => {
             let _ = e.print();
             std::process::exit(ExitCode::Usage.code());
         }
+    }
+}
+
+fn main() {
+    let raw: Vec<std::ffi::OsString> = std::env::args_os().collect();
+    let parsed = parse_cli(raw.iter().cloned());
+
+    // ── Subcommand bridge ──
+    // A subcommand is an ergonomic front-end: translate it to the equivalent
+    // legacy argv and re-parse through the same path, yielding a flat `Cli`
+    // (command = None) that the existing pipeline handles unchanged. The legacy
+    // flat-flag form emits a one-line deprecation nudge (humans only).
+    let cli = if let Some(command) = &parsed.command {
+        let bin = raw.first().cloned().unwrap_or_else(|| "togl".into());
+        let legacy_argv = command.to_legacy_argv(bin);
+        parse_cli(legacy_argv)
+    } else {
+        maybe_warn_legacy(&parsed);
+        parsed
     };
 
     let result = run(&cli);
@@ -131,6 +157,21 @@ fn main() {
         code.code()
     };
     std::process::exit(exit_val);
+}
+
+/// Emit a one-line deprecation nudge toward the subcommand form when the legacy
+/// flat-flag interface is used interactively. Suppressed in machine contexts
+/// (`--json`, non-TTY stderr) and for meta/no-op invocations so it never
+/// pollutes scripts, pipes, or generated output.
+fn maybe_warn_legacy(cli: &Cli) {
+    let meta = cli.completions.is_some() || cli.man;
+    if cli.json || meta || cli.paths.is_empty() || !std::io::stderr().is_terminal() {
+        return;
+    }
+    eprintln!(
+        "note: flat-flag usage is deprecated; prefer subcommands \
+         (toggle/scan/check/list/insert/remove). See `--help`."
+    );
 }
 
 fn classify_error(err: &anyhow::Error) -> ExitCode {
@@ -163,8 +204,13 @@ fn run(cli: &Cli) -> Result<()> {
         return Ok(());
     }
 
+    // Filter mode (stdin → stdout) has three spellings: a `-` path, `--stdin`,
+    // or `--stdout`. In filter mode the input comes from stdin, so an empty
+    // path list is not an error.
+    let filter_mode = cli.stdin || cli.stdout || cli.paths.iter().any(|p| p.as_os_str() == "-");
+
     // Path is required for everything else
-    if cli.paths.is_empty() {
+    if !filter_mode && cli.paths.is_empty() {
         return Err(UsageError("at least one file or directory path is required".into()).into());
     }
 
@@ -240,6 +286,31 @@ fn run(cli: &Cli) -> Result<()> {
     // Validate --encoding value (before --scan so it applies to all modes)
     if !io::is_valid_encoding(&cli.encoding) {
         return Err(UsageError(format!("Unsupported encoding: '{}'", cli.encoding)).into());
+    }
+
+    let opts = ToggleOptions {
+        force: &effective_force,
+        mode: &effective_mode,
+        temp_suffix: cli.temp_suffix.as_deref(),
+        dry_run: cli.dry_run,
+        backup: cli.backup.as_deref(),
+        config: config.as_ref(),
+        verbose: cli.verbose && !cli.json, // suppress verbose in JSON mode
+        eol: &cli.eol,
+        no_dereference: cli.no_dereference,
+        encoding: &cli.encoding,
+        json: cli.json,
+        to_end: cli.to_end,
+        comment_style_override: &cli.comment_style,
+        interactive: cli.interactive,
+    };
+
+    // ── Filter mode (stdin → stdout) ──
+    // Detected before the file-oriented validations below so a stdin stream is
+    // never rejected by "requires exactly one file path"-style checks. Handles
+    // the writer operations (toggle/insert/remove) only.
+    if filter_mode {
+        return run_filter(cli, &opts);
     }
 
     // Handle --scan mode early (read-only, no toggle options needed).
@@ -342,23 +413,6 @@ fn run(cli: &Cli) -> Result<()> {
     }
     // --desc requires --insert: enforced declaratively in cli.rs via clap `requires`.
 
-    let opts = ToggleOptions {
-        force: &effective_force,
-        mode: &effective_mode,
-        temp_suffix: cli.temp_suffix.as_deref(),
-        dry_run: cli.dry_run,
-        backup: cli.backup.as_deref(),
-        config: config.as_ref(),
-        verbose: cli.verbose && !cli.json, // suppress verbose in JSON mode
-        eol: &cli.eol,
-        no_dereference: cli.no_dereference,
-        encoding: &cli.encoding,
-        json: cli.json,
-        to_end: cli.to_end,
-        comment_style_override: &cli.comment_style,
-        interactive: cli.interactive,
-    };
-
     if cli.insert {
         run_insert(cli, &opts)
     } else if cli.remove {
@@ -372,6 +426,142 @@ fn run(cli: &Cli) -> Result<()> {
     } else {
         run_normal(cli, &opts)
     }
+}
+
+/// Filter mode: read the single input stream from stdin, apply the requested
+/// writer operation (toggle / insert / remove), and write the result to stdout.
+/// The file is never touched. Comment style is resolved from `--comment-style`
+/// if given, else defaults to Python `#` (a synthetic `<stdin>.py` path) — pipe
+/// other languages with `--comment-style`.
+fn run_filter(cli: &Cli, opts: &ToggleOptions) -> Result<()> {
+    // Filter mode is for the writer operations only.
+    if cli.scan || cli.list_sections {
+        return Err(UsageError(
+            "stdin/stdout filter mode is only supported for toggle, insert, and remove".into(),
+        )
+        .into());
+    }
+    // Reject flags that have no meaning when the result goes to stdout.
+    let reject = |cond: bool, flag: &str| -> Result<()> {
+        if cond {
+            return Err(UsageError(format!(
+                "{flag} cannot be combined with stdin/stdout filter mode"
+            ))
+            .into());
+        }
+        Ok(())
+    };
+    reject(cli.json, "--json")?;
+    reject(cli.atomic, "--atomic")?;
+    reject(cli.backup.is_some(), "--backup")?;
+    reject(cli.interactive, "--interactive")?;
+    reject(cli.recursive, "--recursive")?;
+    if cli.dry_run {
+        return Err(UsageError(
+            "--dry-run is redundant in filter mode; stdout already shows the result".into(),
+        )
+        .into());
+    }
+    // Resolve the single input source. Filter mode always writes to stdout and
+    // never modifies a file; the input is either stdin or one real file:
+    //   * stdin   — a `-` path, `--stdin`, or `--stdout` with no file path.
+    //   * file    — a real file path with `--stdout` (read it, emit to stdout).
+    // A real file gives a real extension, so its comment style is resolved
+    // normally; stdin has no extension and falls back to Python `#` (synthetic
+    // `<stdin>.py`), overridable with `--comment-style`.
+    let real_paths: Vec<&PathBuf> = cli.paths.iter().filter(|p| p.as_os_str() != "-").collect();
+    let has_dash = cli.paths.iter().any(|p| p.as_os_str() == "-");
+
+    if has_dash && !real_paths.is_empty() {
+        return Err(
+            UsageError("cannot mix `-` (stdin) with a file path in filter mode".into()).into(),
+        );
+    }
+    if cli.stdin && !real_paths.is_empty() {
+        return Err(
+            UsageError("--stdin reads from stdin; do not also pass a file path".into()).into(),
+        );
+    }
+    if real_paths.len() > 1 {
+        return Err(UsageError(
+            "filter mode writes a single stream; pass one file (or read stdin)".into(),
+        )
+        .into());
+    }
+
+    let (input, vpath) = if let Some(path) = real_paths.first() {
+        if path.is_dir() {
+            return Err(UsageError(format!(
+                "filter mode operates on a single file; '{}' is a directory",
+                path.display()
+            ))
+            .into());
+        }
+        let content = io::read_file_encoded(path, opts.encoding)
+            .with_context(|| format!("Failed to read {}", path.display()))?;
+        (content, (*path).clone())
+    } else {
+        let content =
+            io::read_stdin_encoded(opts.encoding).context("Failed to read input from stdin")?;
+        (content, PathBuf::from("<stdin>.py"))
+    };
+
+    let output = if cli.insert {
+        if cli.force.is_some() {
+            return Err(UsageError(
+                "--insert does not take --force (the body is left uncommented)".into(),
+            )
+            .into());
+        }
+        if cli.sections.len() != 1 {
+            return Err(UsageError("--insert requires exactly one -S <ID>".into()).into());
+        }
+        if cli.lines.len() != 1 {
+            return Err(UsageError("--insert requires exactly one -l <range>".into()).into());
+        }
+        let prefix = resolve_comment_style(&vpath, opts)?.single_line;
+        let (start, mut end) = core::parse_line_range(&cli.lines[0])?;
+        if opts.to_end {
+            end = input.lines().count();
+        }
+        let modified = core::insert_section(
+            &input,
+            &cli.sections[0],
+            cli.desc.as_deref(),
+            start,
+            end,
+            &prefix,
+        )?;
+        io::normalize_eol(&modified, opts.eol)
+    } else if cli.remove {
+        if cli.sections.len() != 1 {
+            return Err(UsageError("--remove requires exactly one -S <ID>".into()).into());
+        }
+        let mode = match cli.remove_mode {
+            RemoveMode::Markers => core::RemoveMode::Markers,
+            RemoveMode::Commented => core::RemoveMode::Commented,
+            RemoveMode::All => core::RemoveMode::All,
+        };
+        let style = resolve_comment_style(&vpath, opts)?;
+        let (modified, removed) = core::remove_section(&input, &cli.sections[0], mode, &style);
+        if removed == 0 {
+            eprintln!("Warning: -S {} matched no sections", cli.sections[0]);
+            if cli.require_match {
+                return Err(UsageError(format!(
+                    "--require-match: -S {} matched no sections",
+                    cli.sections[0]
+                ))
+                .into());
+            }
+        }
+        io::normalize_eol(&modified, opts.eol)
+    } else {
+        // Default operation: toggle line ranges and/or sections.
+        compute_file_changes(&vpath, cli, opts, &input)?
+    };
+
+    io::write_stdout_encoded(&output, opts.encoding).context("Failed to write to stdout")?;
+    Ok(())
 }
 
 /// Per PRD §0.13.4: error if any targeted group does not contain exactly 2 variants

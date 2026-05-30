@@ -30,6 +30,24 @@ toggle -S debug --force on -R src/
 toggle --scan -R src/
 ```
 
+## Subcommands
+
+Every operation is also available as a subcommand that exposes only the flags
+relevant to it. The subcommands are equivalent to the flat flags below (they run
+through the same engine), but are easier to discover and harder to misuse:
+
+| Subcommand | Flat-flag equivalent |
+|---|---|
+| `toggle <paths> -S id` | `toggle <paths> -S id` |
+| `toggle scan -R src/` | `toggle --scan -R src/` |
+| `toggle check -R src/` | `toggle --scan --check -R src/` |
+| `toggle list src/` | `toggle --list-sections src/` |
+| `toggle insert main.py -S id -l 10:20` | `toggle --insert -S id -l 10:20 main.py` |
+| `toggle remove main.py -S id` | `toggle --remove -S id main.py` |
+
+Run `toggle <subcommand> --help` to see its scoped flags. The flat-flag form
+still works and is supported, but is deprecated in favor of the subcommands.
+
 ## Section markers
 
 Wrap any block in a paired marker comment that the tool can find:
@@ -105,6 +123,36 @@ toggle --scan -R src/ --json
 
 `--check` exits non-zero on any error finding (unclosed markers, duplicate
 IDs); warnings (variant gaps, pair-count mismatches) do not fail the run.
+
+## Filter mode (stdin → stdout)
+
+The writer operations (`toggle`, `insert`, `remove`) can read from stdin and
+write the transformed result to stdout, leaving any file untouched — so `toggle`
+composes in a pipeline. Use a `-` path, or the `--stdin` / `--stdout` aliases:
+
+```bash
+# stdin → stdout: read stdin, write the result to stdout
+cat main.py | toggle - -S featureX
+
+# Equivalent spellings for stdin → stdout
+toggle --stdin  -S featureX < main.py
+toggle --stdout -S featureX < main.py
+
+# file → stdout: transform a real file, print the result, leave the file on disk
+# untouched (the prettier / clang-format model; great for editor integration).
+toggle main.py --stdout -S featureX
+
+# Works with the subcommands too
+toggle remove --stdin -S featureX < main.py
+toggle insert main.py --stdout -S featureX -l 10:20 > wrapped.py
+```
+
+With `file --stdout`, the comment style is resolved from the file's real
+extension. Piped (stdin) input has no extension, so it defaults to `#` (Python);
+pass `--comment-style` for other languages. Filter mode is always a single
+stream to stdout and never modifies a file, so it does not accept multiple
+files, directories, `--json`, `--atomic`, `--backup`, `--dry-run`,
+`--interactive`, or `-R`.
 
 ## Atomic multi-file mode
 
