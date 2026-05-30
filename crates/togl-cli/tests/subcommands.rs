@@ -249,3 +249,39 @@ fn subcommands_listed_in_help() {
         .stdout(predicate::str::contains("insert"))
         .stdout(predicate::str::contains("remove"));
 }
+
+#[test]
+fn toggle_atomic_recursive_write_parity() {
+    // Atomic multi-file mode reaches the real file-mutation + journal + backup
+    // path through the subcommand bridge. Each run is isolated in its own cwd
+    // (the journal lives in cwd) so they don't collide.
+    fn build_dir() -> TempDir {
+        let dir = TempDir::new().unwrap();
+        for name in ["a.py", "b.py"] {
+            fs::write(dir.path().join(name), SECTION_FILE).unwrap();
+        }
+        dir
+    }
+
+    let sub_dir = build_dir();
+    cmd()
+        .current_dir(sub_dir.path())
+        .args(["toggle", ".", "-S", "feat", "--atomic", "-R"])
+        .assert()
+        .success();
+
+    let legacy_dir = build_dir();
+    cmd()
+        .current_dir(legacy_dir.path())
+        .args([".", "-S", "feat", "--atomic", "-R"])
+        .assert()
+        .success();
+
+    for name in ["a.py", "b.py"] {
+        assert_eq!(
+            fs::read(sub_dir.path().join(name)).unwrap(),
+            fs::read(legacy_dir.path().join(name)).unwrap(),
+            "atomic parity differs for {name}"
+        );
+    }
+}
