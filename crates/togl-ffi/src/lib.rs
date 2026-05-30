@@ -7,6 +7,9 @@
 
 mod error;
 mod mem;
+mod transforms;
+
+pub use transforms::*;
 
 use std::ffi::CString;
 use std::os::raw::{c_char, c_int};
@@ -89,5 +92,63 @@ mod tests {
         togl_string_free(std::ptr::null_mut()); // no-op, no crash
         let owned = CString::new("hi").unwrap().into_raw();
         togl_string_free(owned); // frees without double-free
+    }
+
+    #[test]
+    fn toggle_comments_roundtrip() {
+        let content = CString::new("a\nb\nc\n").unwrap();
+        let ranges = [ToglRange { start: 1, end: 2 }];
+        let mut out: *mut c_char = std::ptr::null_mut();
+        let rc =
+            togl_toggle_comments(content.as_ptr(), ranges.as_ptr(), ranges.len(), 1, &mut out);
+        assert_eq!(rc, 0);
+        let s = unsafe { CStr::from_ptr(out) }.to_str().unwrap().to_owned();
+        assert!(s.contains("# a"), "got: {s}");
+        togl_string_free(out);
+    }
+
+    #[test]
+    fn toggle_comments_null_content_errors() {
+        let mut out: *mut c_char = std::ptr::null_mut();
+        let rc = togl_toggle_comments(std::ptr::null(), std::ptr::null(), 0, 0, &mut out);
+        assert_eq!(rc, -1);
+    }
+
+    #[test]
+    fn toggle_comments_bad_force_errors() {
+        let content = CString::new("a\n").unwrap();
+        let mut out: *mut c_char = std::ptr::null_mut();
+        let rc = togl_toggle_comments(content.as_ptr(), std::ptr::null(), 0, 99, &mut out);
+        assert_eq!(rc, -5);
+    }
+
+    const VARIANTS: &str = "# toggle:start ID=db:sqlite\nimport sqlite3\n# toggle:end ID=db:sqlite\n# toggle:start ID=db:postgres\n# import psycopg2\n# toggle:end ID=db:postgres\n";
+
+    #[test]
+    fn activate_variant_default_marker() {
+        let content = CString::new(VARIANTS).unwrap();
+        let group = CString::new("db").unwrap();
+        let variant = CString::new("postgres").unwrap();
+        let mut out: *mut c_char = std::ptr::null_mut();
+        let rc = togl_activate_variant(
+            content.as_ptr(),
+            group.as_ptr(),
+            variant.as_ptr(),
+            std::ptr::null(),
+            &mut out,
+        );
+        assert_eq!(rc, 0);
+        togl_string_free(out);
+    }
+
+    #[test]
+    fn find_and_toggle_section_default_marker() {
+        let content = CString::new("# toggle:start ID=foo\nx\n# toggle:end ID=foo\n").unwrap();
+        let id = CString::new("foo").unwrap();
+        let mut out: *mut c_char = std::ptr::null_mut();
+        let rc =
+            togl_find_and_toggle_section(content.as_ptr(), id.as_ptr(), std::ptr::null(), &mut out);
+        assert_eq!(rc, 0);
+        togl_string_free(out);
     }
 }
