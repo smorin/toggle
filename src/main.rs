@@ -279,6 +279,9 @@ fn run(cli: &Cli) -> Result<()> {
 
     // Validate --pair: pre-execution guard per PRD §0.13.4
     if cli.pair {
+        if cli.insert {
+            return Err(UsageError("--insert cannot be combined with --pair".into()).into());
+        }
         if cli.sections.is_empty() {
             return Err(UsageError("--pair requires at least one -S <group>".into()).into());
         }
@@ -761,6 +764,7 @@ fn run_insert(cli: &Cli, opts: &ToggleOptions) -> Result<()> {
         end,
         &comment_prefix,
     )?;
+    let modified = io::normalize_eol(&modified, opts.eol);
 
     apply_changes(path, &content, &modified, opts)?;
 

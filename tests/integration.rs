@@ -2219,6 +2219,49 @@ fn test_insert_dry_run_does_not_write() {
 }
 
 #[test]
+fn test_insert_respects_eol_crlf() {
+    let (_dir, path) = setup_temp_file("a\nb\n", "test.py");
+    cmd()
+        .args([
+            path.to_str().unwrap(),
+            "--insert",
+            "-S",
+            "feat",
+            "-l",
+            "1:2",
+            "--eol",
+            "crlf",
+        ])
+        .assert()
+        .success();
+    let result = fs::read_to_string(&path).unwrap();
+    assert_eq!(
+        result,
+        "# toggle:start ID=feat\r\na\r\nb\r\n# toggle:end ID=feat\r\n"
+    );
+}
+
+#[test]
+fn test_insert_rejects_pair_combo() {
+    let (_dir, path) = setup_temp_file("a\nb\n", "test.py");
+    cmd()
+        .args([
+            path.to_str().unwrap(),
+            "--insert",
+            "-S",
+            "feat",
+            "-l",
+            "1:2",
+            "--pair",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "--insert cannot be combined with --pair",
+        ));
+}
+
+#[test]
 fn scan_detailed_view_for_specific_variant() {
     let dir = TempDir::new().unwrap();
     fs::copy("tests/fixtures/variants.py", dir.path().join("variants.py")).unwrap();
