@@ -1,0 +1,10 @@
+{
+  "name": "togl-tooling",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Dev tooling for togl (commitlint config dependencies only).",
+  "devDependencies": {
+    "@commitlint/cli": "^21.0.1",
+    "@commitlint/config-conventional": "^21.0.1"
+  }
+}
