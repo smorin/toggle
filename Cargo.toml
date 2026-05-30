@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/togl-lib", "crates/togl-cli"]
+members = ["crates/togl-lib", "crates/togl-cli", "crates/togl-ffi"]
 resolver = "2"
 
 [workspace.package]
