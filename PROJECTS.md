@@ -264,3 +264,37 @@ interface. Three additive layers, shipped in order:
 - `cargo test` green (all parity + existing suites)
 - `cargo clippy --all-targets -- -D warnings` clean
 - `togl --help` / `--man` / `--completions` render the subcommands under the aliased bin name
+
+---
+
+## [~] Project P11: crates.io publishing (v0.6.0)
+**Goal**: Resume publishing to crates.io (stuck at `togl` 0.2.3 since the
+release pipeline only ships GitHub binaries). Reclaim the `togl` crate name for
+the CLI and auto-publish the library + CLI on each release tag.
+
+**Decisions**
+- Rename the CLI **package** `togl-cli` → `togl` (directory stays `crates/togl-cli`;
+  binaries stay `toggle`/`togl`) — continues the existing `togl` 0.2.3 line and
+  keeps `cargo install togl` working (already in the README).
+- Publish `togl-lib` (library) + `togl` (CLI). `togl-ffi` is `publish = false`
+  (it's the C library, not a Rust dependency).
+- Inter-crate `togl-lib` dep gets a `version` (required for publishing); the
+  release workflow syncs it to the release tag before publishing.
+
+**Out of Scope**
+- Publishing `togl-ffi` to crates.io.
+- Switching release tooling (release-please/`nix-update` stay as-is).
+
+### Tests & Tasks
+- [x] [P11-T01] Rename CLI package → `togl`; add `version` to `togl-lib` dep/dev-dep;
+      `togl-ffi` `publish = false`; update `-p togl-cli` refs (flake, test script)
+- [x] [P11-T02] `publish-crates` job in `release.yml` (sync dep version → tag,
+      publish `togl-lib` then `togl`, `CARGO_REGISTRY_TOKEN`)
+- [x] [P11-TS01] `cargo publish --dry-run` (togl-lib full; togl manifest),
+      full test suite + `nix build .#togl` green after the rename
+
+### Manual Steps (maintainer)
+- Add repo secret `CARGO_REGISTRY_TOKEN` (crates.io API token). Until then the
+  publish job fails loudly but does not block the binary build.
+- First publish fires on the next release tag (e.g. v0.6.0); crates.io versions
+  jump 0.2.3 → that release (allowed — versions only need to increase).

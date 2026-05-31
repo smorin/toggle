@@ -19,8 +19,8 @@ rustPlatform.buildRustPackage {
   cargoLock.lockFile = src + "/Cargo.lock";
 
   # Virtual workspace: build and test only the CLI crate.
-  cargoBuildFlags = [ "-p" "togl-cli" ];
-  cargoTestFlags = [ "-p" "togl-cli" ];
+  cargoBuildFlags = [ "-p" "togl" ];
+  cargoTestFlags = [ "-p" "togl" ];
 
   meta = {
     description = "CLI tool for toggling code comments across multiple languages";
