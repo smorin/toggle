@@ -56,3 +56,49 @@ jobs:
           zip: windows
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Publish the library and CLI crates to crates.io. `togl-lib` is published
+  # first because `togl` depends on it (cargo waits for it to be available
+  # before the dependent publish). `togl-ffi` is `publish = false`.
+  #
+  # Requires the `CARGO_REGISTRY_TOKEN` secret. Until it is set, this job fails
+  # loudly with a clear message but does not affect the binary-build job above.
+  publish-crates:
+    name: Publish to crates.io
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+    steps:
+      - name: Validate tag ref
+        if: github.ref_type != 'tag'
+        run: |
+          echo "::error::Release workflow must be triggered by a tag push, not a branch."
+          exit 1
+
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
+
+      - name: Require crates.io token
+        run: |
+          if [ -z "${CARGO_REGISTRY_TOKEN}" ]; then
+            echo "::error::CARGO_REGISTRY_TOKEN secret is not set. Add it under repo Settings → Secrets to enable crates.io publishing."
+            exit 1
+          fi
+
+      # release-please bumps the workspace version but not the inter-crate dep
+      # requirement, so pin togl-lib's `version` to this release before publish.
+      - name: Sync togl-lib dependency version to the release
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          sed -i "s|\(togl-lib = { path = \"../togl-lib\", version = \"\)[^\"]*|\1${version}|" crates/togl-cli/Cargo.toml
+          git --no-pager diff crates/togl-cli/Cargo.toml
+
+      # --allow-dirty: the version sync above is an intentional, uncommitted
+      # release-time edit.
+      - name: Publish togl-lib
+        run: cargo publish -p togl-lib --allow-dirty
+
+      - name: Publish togl
+        run: cargo publish -p togl --allow-dirty

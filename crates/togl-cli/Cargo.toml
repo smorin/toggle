@@ -1,5 +1,5 @@
 [package]
-name = "togl-cli"
+name = "togl"
 description = "A CLI tool for toggling code comments across multiple languages"
 version.workspace = true
 edition.workspace = true
@@ -15,8 +15,10 @@ path = "src/main.rs"
 name = "togl"
 path = "src/bin/togl.rs"
 
+# The `version` is required for crates.io publishing and is kept in sync with
+# the workspace version by the release workflow before each publish.
 [dependencies]
-togl-lib = { path = "../togl-lib" }
+togl-lib = { path = "../togl-lib", version = "0.5.0" }
 anyhow.workspace = true
 serde.workspace = true
 serde_json = "1"
@@ -26,7 +28,7 @@ clap_mangen = "0.2"
 signal-hook = "0.3"
 
 [dev-dependencies]
-togl-lib = { path = "../togl-lib" }
+togl-lib = { path = "../togl-lib", version = "0.5.0" }
 assert_cmd = "2.0"
 predicates = "3.0"
 tempfile.workspace = true

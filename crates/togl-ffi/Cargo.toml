@@ -6,6 +6,9 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
+# Not published to crates.io: this crate produces the libtogl C library
+# (static/cdylib) for C consumers, not a Rust crate others depend on.
+publish = false
 
 [lib]
 name = "togl"
