@@ -174,3 +174,34 @@ jobs:
 
       - name: Fail if the committed header is out of date
         run: git diff --exit-code crates/togl-ffi/include/togl.h
+
+  # Build the flake's packages (togl + libtogl) on every supported Nix platform.
+  # The repo CI otherwise only exercises the Rust crates via cargo; this is the
+  # only job that builds the Nix derivations, catching flake/derivation breakage
+  # (e.g. a Cargo.lock change that the committed flake.lock no longer matches).
+  nix:
+    name: Nix build (${{ matrix.system }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            system: x86_64-linux
+          - runner: ubuntu-24.04-arm
+            system: aarch64-linux
+          - runner: macos-15-intel
+            system: x86_64-darwin
+          - runner: macos-latest
+            system: aarch64-darwin
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
+
+      # `--no-update-lock-file` keeps the committed flake.lock authoritative:
+      # the build fails rather than silently updating it (portable across Nix
+      # versions; the newer `--locked` isn't available everywhere).
+      - name: Build togl and libtogl
+        run: nix build --no-update-lock-file --print-build-logs '.#togl' '.#libtogl'
