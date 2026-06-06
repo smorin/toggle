@@ -57,18 +57,23 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # Publish the library and CLI crates to crates.io. `togl-lib` is published
-  # first because `togl` depends on it (cargo waits for it to be available
-  # before the dependent publish). `togl-ffi` is `publish = false`.
+  # Publish the library and CLI crates to crates.io via Trusted Publishing
+  # (OIDC — no stored API token). `togl-lib` is published first because `togl`
+  # depends on it (cargo waits for it to be available). `togl-ffi` is
+  # `publish = false`.
   #
-  # Requires the `CARGO_REGISTRY_TOKEN` secret. Until it is set, this job fails
-  # loudly with a clear message but does not affect the binary-build job above.
+  # Setup (one-time): each published crate (`togl-lib`, `togl`) has a Trusted
+  # Publisher on crates.io pointing at this repo, workflow `release.yml`, and
+  # environment `crates`. The job runs in that environment and mints a
+  # short-lived token via `crates-io-auth-action`; no secret is required.
   publish-crates:
     name: Publish to crates.io
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    env:
-      CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+    environment: crates
+    permissions:
+      id-token: write # required to mint the OIDC token for trusted publishing
+      contents: read
     steps:
       - name: Validate tag ref
         if: github.ref_type != 'tag'
@@ -80,12 +85,9 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
 
-      - name: Require crates.io token
-        run: |
-          if [ -z "${CARGO_REGISTRY_TOKEN}" ]; then
-            echo "::error::CARGO_REGISTRY_TOKEN secret is not set. Add it under repo Settings → Secrets to enable crates.io publishing."
-            exit 1
-          fi
+      - name: Authenticate to crates.io (trusted publishing)
+        id: auth
+        uses: rust-lang/crates-io-auth-action@bbd81622f20ce9e2dd9622e3218b975523e45bbe # v1.0.4
 
       # release-please bumps the workspace version but not the inter-crate dep
       # requirement, so pin togl-lib's `version` to this release before publish.
@@ -99,6 +101,10 @@ jobs:
       # release-time edit.
       - name: Publish togl-lib
         run: cargo publish -p togl-lib --allow-dirty
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
 
       - name: Publish togl
         run: cargo publish -p togl --allow-dirty
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
