@@ -289,12 +289,16 @@ the CLI and auto-publish the library + CLI on each release tag.
 - [x] [P11-T01] Rename CLI package → `togl`; add `version` to `togl-lib` dep/dev-dep;
       `togl-ffi` `publish = false`; update `-p togl-cli` refs (flake, test script)
 - [x] [P11-T02] `publish-crates` job in `release.yml` (sync dep version → tag,
-      publish `togl-lib` then `togl`, `CARGO_REGISTRY_TOKEN`)
+      publish `togl-lib` then `togl`)
+- [x] [P11-T03] Trusted Publishing (OIDC): job runs in `environment: crates` with
+      `id-token: write` + `rust-lang/crates-io-auth-action`; no API-token secret
 - [x] [P11-TS01] `cargo publish --dry-run` (togl-lib full; togl manifest),
       full test suite + `nix build .#togl` green after the rename
 
 ### Manual Steps (maintainer)
-- Add repo secret `CARGO_REGISTRY_TOKEN` (crates.io API token). Until then the
-  publish job fails loudly but does not block the binary build.
-- First publish fires on the next release tag (e.g. v0.6.0); crates.io versions
-  jump 0.2.3 → that release (allowed — versions only need to increase).
+- crates.io uses **Trusted Publishing** (no `CARGO_REGISTRY_TOKEN` secret). Per
+  crate (`togl-lib`, `togl`) add a Trusted Publisher: repo `smorin/toggle`,
+  workflow `release.yml`, environment `crates`. (Done: `togl-lib` bootstrapped
+  with a manual `0.0.0` publish since crates.io TP needs the crate to exist first.)
+- First real publish fires on the next release tag (e.g. v0.6.0); crates.io
+  versions jump 0.2.3 → that release (allowed — versions only need to increase).
