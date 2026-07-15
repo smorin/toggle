@@ -1,0 +1,41 @@
+# contributors-please workflow (py-launch-blueprint lineage).
+# Secrets provisioned by repo-secrets --app contributor-please.
+
+name: Update Contributors
+
+on:
+  push:
+    branches: [main]
+    # Loop protection lives HERE (not [skip ci], which would leave the bot PR
+    # permanently blocked behind required checks that never run).
+    paths-ignore:
+      - CONTRIBUTORS.md
+      - .contributors.jsonl
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  contributors-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+
+      - name: Update contributors
+        uses: smorinlabs/contributors-please-action@3c6dbff9ef21190aa1f63b3c400ed4f0ab404ac1 # v1.3.9
+        with:
+          # Input name is "app-id" (the action's defined input); the VALUE is
+          # the Client ID — octokit's createAppAuth accepts it. Do not "fix".
+          app-id: ${{ secrets.CONTRIBUTORS_PLEASE_CLIENT_ID }}
+          private-key: ${{ secrets.CONTRIBUTORS_PLEASE_PRIVATE_KEY }}
+          pat: ${{ secrets.CONTRIBUTORS_PLEASE_PAT }}
+          output-file: CONTRIBUTORS.md
+          state-file: .contributors.jsonl
+          config-file: .contributors.yml
+          mode: pull-request
+          commit-message: "docs: update contributors"
