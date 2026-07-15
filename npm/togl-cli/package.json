@@ -1,0 +1,27 @@
+{
+  "name": "togl-cli",
+  "version": "0.0.0",
+  "description": "A CLI tool for toggling code comments across multiple languages (prebuilt togl/toggle binaries)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/smorin/toggle.git"
+  },
+  "license": "MIT",
+  "bin": {
+    "togl": "bin/togl.js",
+    "toggle": "bin/toggle.js"
+  },
+  "files": [
+    "bin",
+    "lib"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "optionalDependencies": {
+    "@smorinlabs/togl-linux-x64": "0.0.0",
+    "@smorinlabs/togl-darwin-x64": "0.0.0",
+    "@smorinlabs/togl-darwin-arm64": "0.0.0",
+    "@smorinlabs/togl-win32-x64": "0.0.0"
+  }
+}
