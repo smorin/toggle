@@ -302,3 +302,56 @@ the CLI and auto-publish the library + CLI on each release tag.
   with a manual `0.0.0` publish since crates.io TP needs the crate to exist first.)
 - First real publish fires on the next release tag (e.g. v0.6.0); crates.io
   versions jump 0.2.3 → that release (allowed — versions only need to increase).
+
+---
+
+## [-] Project P12: Distribution — PyPI, npm, Homebrew (v0.6.0)
+**Goal**: Ship the togl CLI to PyPI (`togl`), npm (`togl-cli` +
+`@smorinlabs/togl-*` platform packages), and Homebrew
+(`smorinlabs/tap/togl`) from the existing tag-triggered `release.yml`,
+with OIDC trusted publishing everywhere a registry supports it. Also
+hardens `release.yml` (guards job: tag-on-main ancestry + tag==version,
+deny-all top-level permissions, no-cancel concurrency) and installs
+contributors-please.
+
+**Decisions** (locked 2026-06-07)
+- PyPI: maturin `bindings=bin` wheels (no sdist), package `togl`, both
+  `toggle`+`togl` commands; TestPyPI (env `testpypi`, auto) → PyPI (env
+  `pypi`, required reviewer); OIDC on both registries.
+- npm: esbuild-style — unscoped wrapper `togl-cli` + 4 platform packages
+  `@smorinlabs/togl-{linux-x64,darwin-x64,darwin-arm64,win32-x64}`
+  (linux = musl build); strict OIDC on all 5.
+- Homebrew: prebuilt-binary formula `Formula/togl.rb` in
+  smorinlabs/homebrew-tap, pushed with the `HOMEBREW_TAP_TOKEN`
+  fine-grained PAT (the one non-OIDC credential).
+- Release archives renamed `toggle-<target>` → `togl-<target>` and now
+  contain both binaries.
+
+**Out of Scope**
+- Publishing the library to PyPI/npm (togl-ffi is C-ABI; no PyO3/napi).
+- cargo-dist (rejected — would own release.yml; axo.dev wound down).
+
+### Tests & Tasks
+- [x] [P12-T01] pyproject.toml (maturin bindings=bin) + `build-wheels`
+      matrix, `publish-testpypi` → `publish-pypi` jobs
+- [x] [P12-T02] npm/ scaffolding (wrapper + 4 platform pkgs) +
+      `publish-npm` job (unpack tarballs, stamp versions, publish)
+- [x] [P12-T03] `update-homebrew` job rendering Formula/togl.rb from
+      darwin tarball checksums
+- [x] [P12-T04] Harden release.yml: `guards` job, `permissions: {}`,
+      no-cancel concurrency; ship both bins in `togl-<target>` archives
+- [x] [P12-T05] contributors-please: update-contributors.yml,
+      .contributors.yml, CONTRIBUTORS.md markers
+- [ ] [P12-TS01] Pre-release tag (vX.Y.Z-rc.1) exercises the pipeline
+      end-to-end before the first real release
+
+### Manual Steps (maintainer)
+- PyPI + TestPyPI: add trusted publisher per registry for `togl`
+  (owner `smorin`, repo `toggle`, workflow `release.yml`, env
+  `pypi`/`testpypi`).
+- npm: one-time placeholder publish of the 4 platform packages with a
+  temp classic Automation token (npm has no pending publishers), attach
+  trusted publisher (`smorin`/`toggle`/`release.yml`/env `npm`) on all 5
+  packages, revoke token.
+- Homebrew: create the fine-grained PAT (owner smorinlabs, repo
+  homebrew-tap, Contents R/W) → `HOMEBREW_TAP_TOKEN` secret.

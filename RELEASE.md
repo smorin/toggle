@@ -12,10 +12,30 @@ existing tag-triggered **`release.yml`** binary build.
    writing a `CHANGELOG.md` entry. The `sync-cargo-lock` job updates `Cargo.lock`
    on that PR branch so CI's `--locked` checks pass.
 3. Merge the release PR. release-please pushes a `v*` tag.
-4. The `release.yml` workflow fires on the tag and builds the multi-target
-   release binaries.
+4. The `release.yml` workflow fires on the tag, verifies tag provenance
+   (tag on `main`, tag == workspace version), builds the multi-target release
+   binaries, and fans out to the publish destinations below.
 
 `feat:` → minor bump, `fix:`/`perf:` → patch, `feat!:`/`BREAKING CHANGE:` → major.
+
+## Publish destinations
+
+Every registry that supports OIDC trusted publishing uses it — no stored
+registry tokens. Production publishes run in GitHub environments; the `pypi`,
+`npm`, and `crates` environments have a required reviewer as the final human
+gate (TestPyPI publishes automatically as the smoke test).
+
+| Destination | Job | Environment | Auth |
+|---|---|---|---|
+| GitHub Release binaries | `build-release` | — | `GITHUB_TOKEN` |
+| crates.io (`togl-lib`, `togl`) | `publish-crates` | `crates` | OIDC trusted publishing |
+| TestPyPI → PyPI (`togl`) | `publish-testpypi` → `publish-pypi` | `testpypi` → `pypi` | OIDC trusted publishing (wheels via maturin `bindings=bin`) |
+| npm (`togl-cli` + 4 `@smorinlabs/togl-*` platform packages) | `publish-npm` | `npm` | OIDC trusted publishing |
+| Homebrew (`smorinlabs/tap/togl`) | `update-homebrew` | — | `HOMEBREW_TAP_TOKEN` fine-grained PAT (the one non-OIDC credential) |
+
+Release archives are named `togl-<target>.tar.gz` (`.zip` on Windows) and
+contain both the `toggle` and `togl` binaries; the npm platform packages and
+the Homebrew formula unpack them.
 
 ## Disabling release-please
 
@@ -44,7 +64,7 @@ of these two mechanisms instead:
 
 1. **GitHub App (preferred).** Create a GitHub App with **Contents** and
    **Pull requests: write**, install it on this repo, then add two secrets:
-   - `RELEASE_PLEASE_APP_ID` — the App's numeric ID
+   - `RELEASE_PLEASE_CLIENT_ID` — the App's Client ID
    - `RELEASE_PLEASE_PRIVATE_KEY` — the App's private key (`.pem` contents)
 
    Both jobs mint a short-lived installation token from these.
