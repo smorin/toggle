@@ -1,3 +1,17 @@
+# Release pipeline. Fires on the v* tag release-please pushes; builds binaries
+# once, then fans out to every publish destination (GitHub Release assets,
+# crates.io, PyPI, npm, Homebrew tap).
+#
+# This is the most security-sensitive workflow in the repo:
+#   - permissions are deny-all at the top; every job re-grants only what it needs
+#   - the guards job stops tags that don't point at main or don't match the
+#     workspace version — a v* tag can otherwise point at ANY commit
+#   - every registry that supports OIDC trusted publishing uses it (crates.io,
+#     TestPyPI, PyPI, npm); the sole long-lived secret is HOMEBREW_TAP_TOKEN
+#     (a cross-repo git push has no OIDC path)
+#   - production-publish jobs run in GitHub environments so a required reviewer
+#     is the final human gate
+
 name: Release
 
 on:
@@ -6,14 +20,63 @@ on:
       - 'v[0-9]+.[0-9]+.[0-9]+*'
   workflow_dispatch:
 
-permissions:
-  contents: write
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false # never cancel an in-flight publish
 
 jobs:
+  # Tag provenance guards. Everything else `needs:` this job.
+  guards:
+    name: Verify tag provenance
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Validate tag ref
+        if: github.ref_type != 'tag'
+        run: |
+          echo "::error::Release workflow must be triggered by a tag push, not a branch."
+          exit 1
+
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0 # full history for the ancestry check
+
+      - name: Verify tag is reachable from main
+        # A v* tag can point at any commit, including never-merged branch
+        # work. Without this, anyone with tag-push rights releases off-main
+        # code. The environment reviewers are the final gate; this check
+        # stops the workflow before it even builds.
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          if ! git merge-base --is-ancestor "${GITHUB_SHA}" origin/main; then
+            echo "::error::Tag ${GITHUB_REF_NAME} (${GITHUB_SHA}) is not reachable from origin/main."
+            exit 1
+          fi
+          echo "PASS: tag on main"
+
+      - name: Verify tag matches workspace version
+        run: |
+          set -euo pipefail
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PKG_VERSION="$(sed -n '/^\[workspace\.package\]/,/^\[/p' Cargo.toml | sed -n 's/^version = "\(.*\)"/\1/p' | head -1)"
+          if [ "${TAG_VERSION}" != "${PKG_VERSION}" ]; then
+            echo "::error::Tag ${TAG_VERSION} != workspace version ${PKG_VERSION}"
+            exit 1
+          fi
+          echo "PASS: tag matches workspace version (${TAG_VERSION})"
+
   build-release:
     name: Build (${{ matrix.target }})
+    needs: guards
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
+    permissions:
+      contents: write # attach artifacts to the GitHub Release
     strategy:
       fail-fast: false
       matrix:
@@ -29,12 +92,6 @@ jobs:
           - os: windows-latest
             target: x86_64-pc-windows-msvc
     steps:
-      - name: Validate tag ref
-        if: github.ref_type != 'tag'
-        run: |
-          echo "::error::Release workflow must be triggered by a tag push, not a branch."
-          exit 1
-
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
@@ -47,10 +104,13 @@ jobs:
 
       - uses: Swatinem/rust-cache@401aff9a7a08acb9d27b64936a90db81024cff97 # v2.8.2
 
-      - name: Upload binary to release
+      - name: Upload binaries to release
         uses: taiki-e/upload-rust-binary-action@57510bf386b3945b57963e73201cea60ca18dff4 # v1.9.1
         with:
-          bin: toggle
+          # Both CLI entry points ship in one archive per target; the npm
+          # platform packages and the Homebrew formula unpack these.
+          bin: toggle,togl
+          archive: togl-$target
           target: ${{ matrix.target }}
           tar: unix
           zip: windows
@@ -68,6 +128,7 @@ jobs:
   # short-lived token via `crates-io-auth-action`; no secret is required.
   publish-crates:
     name: Publish to crates.io
+    needs: guards
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: crates
@@ -75,12 +136,6 @@ jobs:
       id-token: write # required to mint the OIDC token for trusted publishing
       contents: read
     steps:
-      - name: Validate tag ref
-        if: github.ref_type != 'tag'
-        run: |
-          echo "::error::Release workflow must be triggered by a tag push, not a branch."
-          exit 1
-
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
@@ -108,3 +163,256 @@ jobs:
         run: cargo publish -p togl --allow-dirty
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+
+  # Build platform wheels for PyPI. maturin `bindings = "bin"` (pyproject.toml)
+  # packages the toggle/togl binaries as wheel entry points — one wheel per
+  # platform, no sdist (a source install would require a Rust toolchain).
+  build-wheels:
+    name: Wheel (${{ matrix.target }})
+    needs: guards
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            manylinux: auto
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            manylinux: musllinux_1_2
+          - os: macos-latest
+            target: x86_64-apple-darwin
+          - os: macos-latest
+            target: aarch64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Build wheel
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
+        with:
+          target: ${{ matrix.target }}
+          args: --release --locked --out dist
+          manylinux: ${{ matrix.manylinux }}
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wheels-${{ matrix.target }}
+          path: dist/*.whl
+          if-no-files-found: error
+
+  # TestPyPI publishes automatically as the smoke test; PyPI (below) sits
+  # behind the `pypi` environment's required reviewer.
+  publish-testpypi:
+    name: Publish to TestPyPI
+    needs: build-wheels
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: testpypi
+    permissions:
+      id-token: write # OIDC trusted publishing needs nothing else
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: wheels-*
+          merge-multiple: true
+          path: dist/
+
+      - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          enable-cache: false
+          ignore-empty-workdir: true
+
+      - name: Publish to TestPyPI
+        run: |
+          uv publish --trusted-publishing always \
+            --publish-url https://test.pypi.org/legacy/ \
+            --check-url https://test.pypi.org/simple/ \
+            dist/*
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: publish-testpypi
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: pypi # required reviewer = the human gate
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: wheels-*
+          merge-multiple: true
+          path: dist/
+
+      - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          enable-cache: false
+          ignore-empty-workdir: true
+
+      - name: Publish to PyPI
+        run: |
+          uv publish --trusted-publishing always \
+            --check-url https://pypi.org/simple/ \
+            dist/*
+
+  # Publish the wrapper + platform packages (npm/README.md documents the
+  # layout). Binaries come from the release tarballs build-release attached;
+  # versions are stamped from the tag. All five packages use npm trusted
+  # publishing (OIDC; npm >= 11.5.1 auto-emits provenance).
+  publish-npm:
+    name: Publish to npm
+    needs: build-release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: npm
+    permissions:
+      contents: read # gh release download
+      id-token: write # trusted publishing + auto-provenance
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: Ensure npm >= 11.5.1 (trusted publishing floor)
+        run: npm install -g npm@latest
+
+      - name: Download release tarballs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release download "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" \
+            --pattern 'togl-*' --dir tarballs
+
+      - name: Unpack binaries into platform packages
+        run: |
+          set -euo pipefail
+          declare -A MAP=(
+            [linux-x64]=x86_64-unknown-linux-musl
+            [darwin-x64]=x86_64-apple-darwin
+            [darwin-arm64]=aarch64-apple-darwin
+            [win32-x64]=x86_64-pc-windows-msvc
+          )
+          for plat in "${!MAP[@]}"; do
+            target="${MAP[$plat]}"
+            bindir="npm/platform/${plat}/bin"
+            mkdir -p "${bindir}"
+            if [ "${plat}" = "win32-x64" ]; then
+              unzip -o "tarballs/togl-${target}.zip" -d "${bindir}"
+              test -f "${bindir}/togl.exe" && test -f "${bindir}/toggle.exe"
+            else
+              tar -xzf "tarballs/togl-${target}.tar.gz" -C "${bindir}"
+              test -x "${bindir}/togl" && test -x "${bindir}/toggle"
+            fi
+          done
+
+      - name: Stamp package versions from the tag
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          for plat in linux-x64 darwin-x64 darwin-arm64 win32-x64; do
+            (cd "npm/platform/${plat}" && npm pkg set version="${VERSION}")
+          done
+          (cd npm/togl-cli && npm pkg set version="${VERSION}" \
+            "optionalDependencies.@smorinlabs/togl-linux-x64=${VERSION}" \
+            "optionalDependencies.@smorinlabs/togl-darwin-x64=${VERSION}" \
+            "optionalDependencies.@smorinlabs/togl-darwin-arm64=${VERSION}" \
+            "optionalDependencies.@smorinlabs/togl-win32-x64=${VERSION}")
+
+      # Platform packages first — the wrapper's optionalDependencies must be
+      # resolvable the moment it lands.
+      - name: Publish platform packages
+        run: |
+          set -euo pipefail
+          for plat in linux-x64 darwin-x64 darwin-arm64 win32-x64; do
+            (cd "npm/platform/${plat}" && npm publish --access public)
+          done
+
+      - name: Publish togl-cli
+        run: |
+          set -euo pipefail
+          cd npm/togl-cli && npm publish
+
+  # Bump the prebuilt-binary formula in smorinlabs/homebrew-tap. The
+  # HOMEBREW_TAP_TOKEN fine-grained PAT (owner smorinlabs, only homebrew-tap,
+  # Contents R/W) is the one non-OIDC credential in this pipeline — a
+  # cross-repo git push has no OIDC path.
+  update-homebrew:
+    name: Update Homebrew tap
+    needs: build-release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read # gh release download
+    steps:
+      - name: Download darwin tarballs and compute checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release download "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" \
+            --pattern '*darwin*' --dir tarballs
+          shasum -a 256 tarballs/*
+      - name: Render Formula/togl.rb
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          ARM_SHA="$(shasum -a 256 tarballs/togl-aarch64-apple-darwin.tar.gz | awk '{print $1}')"
+          X64_SHA="$(shasum -a 256 tarballs/togl-x86_64-apple-darwin.tar.gz | awk '{print $1}')"
+          cat > togl.rb <<EOF
+          class Togl < Formula
+            desc "CLI tool for toggling code comments across multiple languages"
+            homepage "https://github.com/smorin/toggle"
+            version "${VERSION}"
+            license "MIT"
+
+            on_macos do
+              on_arm do
+                url "https://github.com/smorin/toggle/releases/download/v${VERSION}/togl-aarch64-apple-darwin.tar.gz"
+                sha256 "${ARM_SHA}"
+              end
+              on_intel do
+                url "https://github.com/smorin/toggle/releases/download/v${VERSION}/togl-x86_64-apple-darwin.tar.gz"
+                sha256 "${X64_SHA}"
+              end
+            end
+
+            def install
+              bin.install "togl"
+              bin.install "toggle"
+            end
+
+            test do
+              assert_match version.to_s, shell_output("#{bin}/togl --version")
+            end
+          end
+          EOF
+          cat togl.rb
+
+      - name: Push formula to smorinlabs/homebrew-tap
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          set -euo pipefail
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/smorinlabs/homebrew-tap.git" tap
+          mkdir -p tap/Formula
+          cp togl.rb tap/Formula/togl.rb
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/togl.rb
+          if git diff --cached --quiet; then
+            echo "Formula already up to date"
+          else
+            git commit -m "togl ${GITHUB_REF_NAME}"
+            git push
+          fi
