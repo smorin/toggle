@@ -3,6 +3,13 @@
 All notable changes are listed here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [SemVer](https://semver.org/).
 
+## [0.5.1](https://github.com/smorin/toggle/compare/v0.5.0...v0.5.1) (2026-07-16)
+
+
+### Bug Fixes
+
+* use schema-valid 'default' object in .contributors.yml ([#47](https://github.com/smorin/toggle/issues/47)) ([d8c08ed](https://github.com/smorin/toggle/commit/d8c08eda1f8361aa92e7393b167f42985aafad18))
+
 ## [0.5.0](https://github.com/smorin/toggle/compare/v0.4.0...v0.5.0) (2026-05-30)
 
 
