@@ -20,10 +20,12 @@ existing tag-triggered **`release.yml`** binary build.
 
 ## Publish destinations
 
-Every registry that supports OIDC trusted publishing uses it — no stored
-registry tokens. Production publishes run in GitHub environments; the `pypi`,
-`npm`, and `crates` environments have a required reviewer as the final human
-gate (TestPyPI publishes automatically as the smoke test).
+Every registry that supports OIDC trusted publishing uses it, and the
+Homebrew tap push mints a short-lived App installation token in-job — no
+long-lived credentials anywhere. Production publishes run in GitHub
+environments; the `pypi`, `npm`, and `crates` environments have a required
+reviewer as the final human gate (TestPyPI publishes automatically as the
+smoke test).
 
 | Destination | Job | Environment | Auth |
 |---|---|---|---|
@@ -31,7 +33,7 @@ gate (TestPyPI publishes automatically as the smoke test).
 | crates.io (`togl-lib`, `togl`) | `publish-crates` | `crates` | OIDC trusted publishing |
 | TestPyPI → PyPI (`togl`) | `publish-testpypi` → `publish-pypi` | `testpypi` → `pypi` | OIDC trusted publishing (wheels via maturin `bindings=bin`) |
 | npm (`togl-cli` + 4 `@smorinlabs/togl-*` platform packages) | `publish-npm` | `npm` | OIDC trusted publishing |
-| Homebrew (`smorinlabs/tap/togl`) | `update-homebrew` | — | `HOMEBREW_TAP_TOKEN` fine-grained PAT (the one non-OIDC credential) |
+| Homebrew (`smorinlabs/tap/togl`) | `update-homebrew` | — | Short-lived App token (`TAP_PUSH_APP_*` secrets; App installed on the tap) |
 
 Release archives are named `togl-<target>.tar.gz` (`.zip` on Windows) and
 contain both the `toggle` and `togl` binaries; the npm platform packages and

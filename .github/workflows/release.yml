@@ -342,10 +342,12 @@ jobs:
           set -euo pipefail
           cd npm/togl-cli && npm publish
 
-  # Bump the prebuilt-binary formula in smorinlabs/homebrew-tap. The
-  # HOMEBREW_TAP_TOKEN fine-grained PAT (owner smorinlabs, only homebrew-tap,
-  # Contents R/W) is the one non-OIDC credential in this pipeline — a
-  # cross-repo git push has no OIDC path.
+  # Bump the prebuilt-binary formula in smorinlabs/homebrew-tap. The push
+  # authenticates with a short-lived App installation token minted in-job
+  # (same technique as release-please.yml), scoped to only the tap repo —
+  # no long-lived credential. One-time setup: the smorinlabs App installed
+  # on smorinlabs/homebrew-tap; TAP_PUSH_APP_* secrets via
+  # `repo-secrets --app tap-push`.
   update-homebrew:
     name: Update Homebrew tap
     needs: build-release
@@ -398,9 +400,18 @@ jobs:
           EOF
           cat togl.rb
 
+      - name: Mint tap-push app token
+        id: tap-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.TAP_PUSH_APP_CLIENT_ID }}
+          private-key: ${{ secrets.TAP_PUSH_APP_PRIVATE_KEY }}
+          owner: smorinlabs
+          repositories: homebrew-tap
+
       - name: Push formula to smorinlabs/homebrew-tap
         env:
-          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          GH_TOKEN: ${{ steps.tap-token.outputs.token }}
         run: |
           set -euo pipefail
           git clone "https://x-access-token:${GH_TOKEN}@github.com/smorinlabs/homebrew-tap.git" tap

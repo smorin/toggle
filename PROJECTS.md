@@ -322,8 +322,10 @@ contributors-please.
   `@smorinlabs/togl-{linux-x64,darwin-x64,darwin-arm64,win32-x64}`
   (linux = musl build); strict OIDC on all 5.
 - Homebrew: prebuilt-binary formula `Formula/togl.rb` in
-  smorinlabs/homebrew-tap, pushed with the `HOMEBREW_TAP_TOKEN`
-  fine-grained PAT (the one non-OIDC credential).
+  smorinlabs/homebrew-tap, pushed with a short-lived App installation
+  token minted in-job (`TAP_PUSH_APP_*` secrets; smorinlabs App installed
+  on the tap) — revised 2026-07-15 from the original `HOMEBREW_TAP_TOKEN`
+  PAT plan, eliminating the pattern's last long-lived credential.
 - Release archives renamed `toggle-<target>` → `togl-<target>` and now
   contain both binaries.
 
@@ -353,5 +355,5 @@ contributors-please.
   temp classic Automation token (npm has no pending publishers), attach
   trusted publisher (`smorin`/`toggle`/`release.yml`/env `npm`) on all 5
   packages, revoke token.
-- Homebrew: create the fine-grained PAT (owner smorinlabs, repo
-  homebrew-tap, Contents R/W) → `HOMEBREW_TAP_TOKEN` secret.
+- Homebrew: install the smorinlabs App on smorinlabs/homebrew-tap, then
+  `repo_secrets set --repo smorin/toggle --app tap-push`.
