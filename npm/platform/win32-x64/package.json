@@ -1,0 +1,22 @@
+{
+  "name": "@smorinlabs/togl-win32-x64",
+  "version": "0.0.0",
+  "description": "Prebuilt togl/toggle binaries for Windows x64",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/smorin/toggle.git"
+  },
+  "license": "MIT",
+  "os": [
+    "win32"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "files": [
+    "bin"
+  ],
+  "engines": {
+    "node": ">=18"
+  }
+}

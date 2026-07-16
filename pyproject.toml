@@ -1,0 +1,30 @@
+# PyPI packaging for the togl CLI. maturin `bindings = "bin"` ships the
+# compiled `toggle` + `togl` binaries as wheel entry points — no Python
+# bindings, no PyO3. Version comes from crates/togl-cli/Cargo.toml (the
+# workspace version release-please bumps).
+[build-system]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "togl"
+description = "A CLI tool for toggling code comments across multiple languages"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Steve Morin" }]
+requires-python = ">=3.9"
+keywords = ["cli", "comments", "toggle", "code"]
+classifiers = [
+  "Environment :: Console",
+  "Programming Language :: Rust",
+  "Operating System :: OS Independent",
+]
+dynamic = ["version"]
+
+[project.urls]
+Repository = "https://github.com/smorin/toggle"
+Changelog = "https://github.com/smorin/toggle/blob/main/CHANGELOG.md"
+
+[tool.maturin]
+bindings = "bin"
+manifest-path = "crates/togl-cli/Cargo.toml"
