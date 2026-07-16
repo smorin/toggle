@@ -344,8 +344,10 @@ contributors-please.
       no-cancel concurrency; ship both bins in `togl-<target>` archives
 - [x] [P12-T05] contributors-please: update-contributors.yml,
       .contributors.yml, CONTRIBUTORS.md markers
-- [ ] [P12-TS01] Pre-release tag (vX.Y.Z-rc.1) exercises the pipeline
-      end-to-end before the first real release
+- [ ] [P12-TS01] First gated release exercises the pipeline end-to-end
+      (an rc tag would fail the tag==version guard without a matching
+      version-bump commit, and npm would tag the rc `latest`; the
+      environment reviewer gates + TestPyPI smoke test cover the risk)
 
 ### Manual Steps (maintainer)
 - PyPI + TestPyPI: add trusted publisher per registry for `togl`

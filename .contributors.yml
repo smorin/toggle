@@ -33,4 +33,6 @@ classification:
         - "tests/**"
         - "benches/**"
         - "nix/**"
-  default_category: code
+  default:
+    id: code
+    label: Code Contributor
