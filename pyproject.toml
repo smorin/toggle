@@ -15,9 +15,9 @@ authors = [{ name = "Steve Morin" }]
 requires-python = ">=3.9"
 keywords = ["cli", "comments", "toggle", "code"]
 classifiers = [
-    "Environment :: Console",
-    "Programming Language :: Rust",
-    "Operating System :: OS Independent",
+  "Environment :: Console",
+  "Programming Language :: Rust",
+  "Operating System :: OS Independent",
 ]
 dynamic = ["version"]
 
