@@ -1,5 +1,5 @@
 # contributors-please workflow (py-launch-blueprint lineage).
-# Secrets provisioned by repo-secrets --app contributor-please.
+# Secrets provisioned by repo-secrets --app contributors-please.
 
 name: Update Contributors
 
