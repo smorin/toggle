@@ -329,18 +329,31 @@ jobs:
             "optionalDependencies.@smorinlabs/togl-win32-x64=${VERSION}")
 
       # Platform packages first — the wrapper's optionalDependencies must be
-      # resolvable the moment it lands.
+      # resolvable the moment it lands. Skip versions already on the registry
+      # so a partial-failure rerun is idempotent (npm hard-rejects publishing
+      # over an existing version).
       - name: Publish platform packages
         run: |
           set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
           for plat in linux-x64 darwin-x64 darwin-arm64 win32-x64; do
+            pkg="@smorinlabs/togl-${plat}"
+            if npm view "${pkg}@${VERSION}" version >/dev/null 2>&1; then
+              echo "${pkg}@${VERSION} already published — skipping"
+              continue
+            fi
             (cd "npm/platform/${plat}" && npm publish --access public)
           done
 
       - name: Publish togl-cli
         run: |
           set -euo pipefail
-          cd npm/togl-cli && npm publish
+          VERSION="${GITHUB_REF_NAME#v}"
+          if npm view "togl-cli@${VERSION}" version >/dev/null 2>&1; then
+            echo "togl-cli@${VERSION} already published — skipping"
+          else
+            cd npm/togl-cli && npm publish
+          fi
 
   # Bump the prebuilt-binary formula in smorinlabs/homebrew-tap. The push
   # authenticates with a short-lived App installation token minted in-job
