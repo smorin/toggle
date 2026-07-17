@@ -3,6 +3,13 @@
 All notable changes are listed here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [SemVer](https://semver.org/).
 
+## [0.5.2](https://github.com/smorin/toggle/compare/v0.5.1...v0.5.2) (2026-07-17)
+
+
+### Bug Fixes
+
+* **release:** idempotent npm publishes; clear RUSTSEC advisories ([#51](https://github.com/smorin/toggle/issues/51)) ([9514cdb](https://github.com/smorin/toggle/commit/9514cdbb6d6ef7456f9ce03785a73f2fe753586f))
+
 ## [0.5.1](https://github.com/smorin/toggle/compare/v0.5.0...v0.5.1) (2026-07-16)
 
 
