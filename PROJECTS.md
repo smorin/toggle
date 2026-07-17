@@ -305,7 +305,7 @@ the CLI and auto-publish the library + CLI on each release tag.
 
 ---
 
-## [-] Project P12: Distribution — PyPI, npm, Homebrew (v0.6.0)
+## [x] Project P12: Distribution — PyPI, npm, Homebrew (v0.5.2)
 **Goal**: Ship the togl CLI to PyPI (`togl`), npm (`togl-cli` +
 `@smorinlabs/togl-*` platform packages), and Homebrew
 (`smorinlabs/tap/togl`) from the existing tag-triggered `release.yml`,
@@ -344,10 +344,11 @@ contributors-please.
       no-cancel concurrency; ship both bins in `togl-<target>` archives
 - [x] [P12-T05] contributors-please: update-contributors.yml,
       .contributors.yml, CONTRIBUTORS.md markers
-- [ ] [P12-TS01] First gated release exercises the pipeline end-to-end
-      (an rc tag would fail the tag==version guard without a matching
-      version-bump commit, and npm would tag the rc `latest`; the
-      environment reviewer gates + TestPyPI smoke test cover the risk)
+- [x] [P12-TS01] First gated releases exercised the pipeline end-to-end:
+      v0.5.1 shipped binaries/crates/PyPI/Homebrew (npm blocked on
+      publisher config + non-idempotent publishes); v0.5.2 shipped all
+      five destinations green in one run, wrapper install + architecture
+      selection verified on darwin-arm64 with cross-platform tarball checks
 
 ### Manual Steps (maintainer)
 - PyPI + TestPyPI: add trusted publisher per registry for `togl`
