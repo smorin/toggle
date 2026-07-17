@@ -59,6 +59,14 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
+    env:
+      # LNK1201 ("error writing to program database") is an intermittent MSVC
+      # linker failure writing PDB debug-symbol files on shared runners. CI
+      # test runs never consume PDBs, so disable debug info on Windows —
+      # no PDB is written and the failure mode cannot occur (also trims
+      # build time and cache size). Linux/macOS keep the default.
+      CARGO_PROFILE_DEV_DEBUG: ${{ matrix.os == 'windows-latest' && '0' || 'true' }}
+      CARGO_PROFILE_TEST_DEBUG: ${{ matrix.os == 'windows-latest' && '0' || 'true' }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
